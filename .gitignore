@@ -1,0 +1,69 @@
+# Root .gitignore for KCGGRA Project
+
+# Node modules in any directory
+**/node_modules/
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+
+# Environment variables - NEVER COMMIT THESE
+**/.env
+**/.env.local
+**/.env.development
+**/.env.test
+**/.env.production
+**/.env.*.local
+
+# Logs
+**/*.log
+**/logs/
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+**/dist/
+**/build/
+**/coverage/
+
+# Temporary files
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.temp
+
+# Uploads (user-generated content)
+**/uploads/
+
+# Database files
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Sensitive files
+**/*.pem
+**/*.key
+**/*.cert
+**/secrets.json
+**/serviceAccount.json
+
+# PM2
+.pm2/
+
+
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
