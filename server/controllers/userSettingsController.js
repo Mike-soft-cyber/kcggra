@@ -1,27 +1,72 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const cloudinary = require('../config/cloudinary');
+const streamifier = require('streamifier');
 
-exports.updateProfile = async (req, res) => {
+exports.updateProfilePicture = async (req, res) => {
   try {
-    const { username, email, street, phone } = req.body;
-    const user = await User.findById(req.user._id);
+    const userId = req.user._id;
 
-    if (!user) {
-      return res.status(404).json({
+    if (!req.file) {
+      return res.status(400).json({
         success: false,
-        message: 'User not found',
+        message: 'No image file provided',
       });
     }
 
-    // Update fields
+    console.log('📤 Uploading profile picture for user:', userId);
+    console.log('📁 Cloudinary upload result:', req.file.path);
+
+    const profilePicUrl = req.file.path;
+
+    const user = await User.findById(userId);
+    
+    if (user.profilePic && user.profilePic.includes('cloudinary')) {
+      try {
+        const urlParts = user.profilePic.split('/');
+        const filename = urlParts[urlParts.length - 1];
+        const publicId = `kcggra/profile-pictures/${filename.split('.')[0]}`;
+        
+        await cloudinary.uploader.destroy(publicId);
+        console.log('🗑️ Deleted old profile picture:', publicId);
+      } catch (err) {
+        console.error('⚠️ Failed to delete old profile pic (non-critical):', err.message);
+      }
+    }
+
+    user.profilePic = profilePicUrl;
+    await user.save();
+
+    console.log('Profile picture updated successfully');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile picture updated successfully',
+      profilePic: profilePicUrl,
+    });
+  } catch (error) {
+    console.error('Profile picture upload error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile picture',
+      error: error.message,
+    });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { username, email, street, role } = req.body;
+    const user = req.user;
+
     if (username) user.username = username;
     if (email) user.email = email;
     if (street) user.street = street;
-    if (phone) user.phone = phone;
+    if (role) user.role = role;
 
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
       user: {
@@ -31,16 +76,41 @@ exports.updateProfile = async (req, res) => {
         phone: user.phone,
         street: user.street,
         role: user.role,
-        subStatus: user.subStatus,
         profilePic: user.profilePic,
       },
     });
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to update profile',
       error: error.message,
+    });
+  }
+};
+
+exports.updateNotifications = async (req, res) => {
+  try {
+    const user = req.user;
+    const preferences = req.body;
+
+    user.notification_preferences = {
+      ...user.notification_preferences,
+      ...preferences,
+    };
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Notification preferences updated',
+      preferences: user.notification_preferences,
+    });
+  } catch (error) {
+    console.error('Update notifications error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update notifications',
     });
   }
 };
@@ -73,7 +143,7 @@ exports.updateNotificationPreferences = async (req, res) => {
       notification_preferences: user.notification_preferences,
     });
   } catch (error) {
-    console.error('❌ Update notifications error:', error);
+    console.error('Update notifications error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update notification preferences',
@@ -120,7 +190,7 @@ exports.changePassword = async (req, res) => {
       message: 'Password changed successfully',
     });
   } catch (error) {
-    console.error('❌ Change password error:', error);
+    console.error('Change password error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to change password',
@@ -137,7 +207,7 @@ exports.getActiveSessions = async (req, res) => {
       sessions: user.active_sessions || [],
     });
   } catch (error) {
-    console.error('❌ Get sessions error:', error);
+    console.error('Get sessions error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch active sessions',

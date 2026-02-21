@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken')
 const { sendOTP } = require('../services/smsService')
 const { generateOTP, getOTPExpiry, isOTPExpired } = require('../utils/otpUtils')
 
-//OTP signup/login
 exports.requestOTP = async(req, res) => {
     try {
         const { phone } = req.body
@@ -21,11 +20,14 @@ exports.requestOTP = async(req, res) => {
         const expiresAt = getOTPExpiry()
 
         let user = await User.findOne({phone})
+        const isNewUser = !user;
+
         if(!user){
             user = new User({
                 phone,
                 username: `User_${phone.slice(-4)}`,
                 street: 'Not specified',
+                role: 'resident',
                 otp: { code: otp, expiresAt }
             })
         }else{
@@ -34,26 +36,35 @@ exports.requestOTP = async(req, res) => {
 
         await user.save()
 
-        await sendOTP(`+${phone}`, otp)
+        // ✅ Try to send SMS but don't crash if it fails
+        let smsSent = false;
+        try {
+            await sendOTP(`+${phone}`, otp)
+            smsSent = true
+        } catch (error) {
+            console.error('⚠️ SMS failed:', error.message)
+        }
 
         res.status(200).json({
             success: true,
-            message: 'OTP sent to your phone',
-            ...(process.env.NODE_ENV === 'development' && { otp })
+            message: smsSent ? 'OTP sent to your phone' : 'OTP generated (check console)',
+            isNewUser,
+            ...(process.env.NODE_ENV === 'development' && { otp }),
+            smsSent
         })
     } catch (error) {
-        console.error('Request OTP error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send OTP',
-      error: error.message,
-    });
+        console.error('❌ Request OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send OTP',
+            error: error.message,
+        });
     }
 }
 
 exports.verifyOTP = async(req, res) => {
    try {
-    const { phone, otp, username, street } = req.body;
+    const { phone, otp, username, street, role } = req.body;
     const user = await User.findOne({ phone });
 
     if (!user) {
@@ -87,6 +98,10 @@ exports.verifyOTP = async(req, res) => {
     if (username) user.username = username;
     if (street) user.street = street;
 
+    if (role && ['resident', 'guard', 'admin'].includes(role)) {
+      user.role = role;
+    }
+
     user.otp = undefined;
     await user.save();
 
@@ -99,14 +114,15 @@ exports.verifyOTP = async(req, res) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     const userResponse = {
       _id: user._id,
       phone: user.phone,
       username: user.username,
+      email: user.email,
       street: user.street,
       role: user.role,
       subStatus: user.subStatus,
@@ -169,7 +185,7 @@ exports.signup = async (req, res) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -186,7 +202,7 @@ exports.signup = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Signup failed:', error);
+    console.error('❌ Signup failed:', error);
     res.status(500).json({
       success: false,
       message: 'Signup failed',
@@ -217,23 +233,26 @@ exports.login = async (req, res) => {
       });
     }
 
-    const userAgent = req.headers['user-agent'];
-const ipAddress = req.ip || req.connection.remoteAddress;
+    // Track session
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ipAddress = req.ip || req.connection?.remoteAddress || 'Unknown';
 
-user.active_sessions.push({
-  device: userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
-  ip_address: ipAddress,
-  login_time: new Date(),
-  last_active: new Date(),
-  user_agent: userAgent,
-});
+    if (!user.active_sessions) user.active_sessions = [];
 
-// Keep only last 5 sessions
-if (user.active_sessions.length > 5) {
-  user.active_sessions = user.active_sessions.slice(-5);
-}
+    user.active_sessions.push({
+      device: userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
+      ip_address: ipAddress,
+      login_time: new Date(),
+      last_active: new Date(),
+      user_agent: userAgent,
+    });
 
-await user.save();
+    // Keep only last 5 sessions
+    if (user.active_sessions.length > 5) {
+      user.active_sessions = user.active_sessions.slice(-5);
+    }
+
+    await user.save();
 
     const token = jwt.sign(
       { userId: user._id, role: user.role },
@@ -244,7 +263,7 @@ await user.save();
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -273,12 +292,17 @@ await user.save();
 
 exports.updateProfile = async (req, res) => {
   try {
-    const { username, street, email } = req.body;
+    const { username, street, email, role } = req.body;
     const user = req.user; 
 
     if (username) user.username = username;
     if (street) user.street = street;
     if (email) user.email = email;
+    
+    // ✅ Allow role update (validate against enum)
+    if (role && ['resident', 'guard', 'admin'].includes(role)) {
+      user.role = role;
+    }
 
     await user.save();
 
@@ -341,7 +365,7 @@ exports.getMe = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('❌ Get me error:', error);
+    console.error('Get me error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get user information',

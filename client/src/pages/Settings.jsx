@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '@/api';
 import { toast } from 'sonner';
@@ -30,6 +30,8 @@ export default function Settings() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate()
   
   // Profile data
@@ -63,6 +65,66 @@ export default function Settings() {
     proxy_phone: '',
     relationship: 'Mother',
   });
+
+const handleProfilePicClick = () => {
+  fileInputRef.current?.click();
+};
+
+const handleFileChange = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  // Validate file type
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    toast.error('Please upload a valid image (JPG, PNG, or WEBP)');
+    return;
+  }
+
+  // Validate file size (5MB max)
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error('Image must be smaller than 5MB');
+    return;
+  }
+
+  setUploadingImage(true);
+
+  try {
+    // Create FormData
+    const formData = new FormData();
+    formData.append('profilePic', file);
+
+    // Upload to backend
+    const response = await API.patch('/user/profile-picture', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    // Update local state
+    setUser({ ...user, profilePic: response.data.profilePic });
+    toast.success('Profile picture updated successfully!');
+  } catch (error) {
+    console.error('Upload error:', error);
+    toast.error(error.response?.data?.message || 'Failed to upload image');
+  } finally {
+    setUploadingImage(false);
+    // Clear the input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+};
+
+const getInitials = (name) => {
+  if (!name) return 'U';
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+};
 
   useEffect(() => {
     fetchUserData();
@@ -210,31 +272,66 @@ export default function Settings() {
               <p className="text-gray-600 text-sm mb-6">Update your personal details</p>
 
               {/* Avatar */}
-              <div className="flex items-center gap-4 mb-6">
-                <div className="relative">
-  {user?.profilePic ? (
-    <img
-      src={user.profilePic}
-      alt={user.username}
-      className="w-20 h-20 rounded-full object-cover"
-    />
-  ) : (
-    <div className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-      {getInitials(user?.username)}
-    </div>
-  )}
-  <button className="absolute bottom-0 right-0 w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white hover:bg-orange-600 transition">
-    <Camera className="w-4 h-4" />
-  </button>
+<div className="flex items-center gap-4 mb-6">
+  {/* Hidden file input */}
+  <input
+    ref={fileInputRef}
+    type="file"
+    accept="image/jpeg,image/jpg,image/png,image/webp"
+    onChange={handleFileChange}
+    className="hidden"
+  />
+
+  <div className="relative">
+    {/* Avatar */}
+    {user?.profilePic ? (
+      <img
+        src={user.profilePic}
+        alt={user?.username}
+        className="w-20 h-20 rounded-full object-cover border-4 border-gray-200"
+        onError={(e) => {
+          e.target.style.display = 'none';
+        }}
+      />
+    ) : (
+      <div className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center text-white text-2xl font-bold border-4 border-gray-200">
+        {getInitials(user?.username)}
+      </div>
+    )}
+
+    {/* Camera Button with Loading State */}
+    <button
+      type="button"
+      onClick={handleProfilePicClick}
+      disabled={uploadingImage}
+      className="absolute bottom-0 right-0 w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white hover:bg-orange-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+      title="Change profile picture"
+    >
+      {uploadingImage ? (
+        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+      ) : (
+        <Camera className="w-4 h-4" />
+      )}
+    </button>
+
+    {/* Upload indicator overlay */}
+    {uploadingImage && (
+      <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+        <div className="text-white text-xs font-medium">Uploading...</div>
+      </div>
+    )}
+  </div>
+
+  <div>
+    <p className="font-bold text-gray-900">{user?.username}</p>
+    <p className="text-sm text-gray-600">
+      Resident since {new Date(user?.createdAt).getFullYear()}
+    </p>
+    <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+      Active Member
+    </span>
+  </div>
 </div>
-                <div>
-                  <p className="font-bold text-gray-900">{user?.username}</p>
-                  <p className="text-sm text-gray-600">Resident since {new Date(user?.createdAt).getFullYear()}</p>
-                  <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                    Active Member
-                  </span>
-                </div>
-              </div>
 
               {/* Form Fields */}
               <div className="grid grid-cols-2 gap-4 mb-6">

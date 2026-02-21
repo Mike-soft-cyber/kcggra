@@ -9,13 +9,17 @@ import Signup from './pages/Signup'
 import ProfilePage from './pages/Profile'
 import PublicVisitorQR from './pages/PublicVisitorQR'
 import ActiveSessions from './pages/Sessions'
-import AdminProjects from './pages/Projects'
 import Visitors from './pages/Visitor'
 import VisitorQR from './pages/VisitorQR'
 import GuardMapPage from './pages/GuardMapPage'
 import AnnouncementsList from './pages/AnnouncementsList'
 import AnnouncementDetail from './pages/AnnouncementDetail'
 import IncidentDetail from './pages/IncidentDetail'
+import AdminLogin from './pages/AdminLogin'
+import AdminDashboard from './pages/AdminDashboard'
+import AdminSubscriptions from './pages/AdminSubscriptions'
+import AdminCapEx from './pages/AdminCapEx'
+import AdminResidents from './pages/AdminResidents'
 
 export default function App() {
   return (
@@ -63,7 +67,11 @@ export default function App() {
         <Route path="/dashboard/profile" element={<ProfilePage />} />
 
         {/* Admin Routes */}
-        <Route path="/admin/projects" element={<AdminProjects />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/subscriptions" element={<AdminSubscriptions />} />
+        <Route path="/admin/capex" element={<AdminCapEx />} />
+        <Route path="/admin/residents" element={<AdminResidents />} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

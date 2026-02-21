@@ -232,15 +232,19 @@ const fetchNotifications = async () => {
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-lg transition"
               >
-                <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+<div className="w-9 h-9 rounded-full bg-green-600 flex items-center justify-center text-white font-bold overflow-hidden">
   {user?.profilePic ? (
-    <img 
-      src={user.profilePic} 
-      alt={user.username} 
+    <img
+      src={user.profilePic}
+      alt={user?.username}
       className="w-full h-full object-cover"
+      onError={(e) => {
+        e.target.style.display = 'none';
+        e.target.parentElement.innerHTML = getInitials(user?.username);
+      }}
     />
   ) : (
-    getInitials(user?.username)
+    <span>{getInitials(user?.username)}</span>
   )}
 </div>
                 <div className="hidden lg:block text-left">

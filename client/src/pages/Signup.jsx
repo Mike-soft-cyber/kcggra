@@ -1,4 +1,4 @@
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import API from "@/api";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, Shield, Users, UserCircle } from "lucide-react";
 import { FcGoogle } from 'react-icons/fc';
 import { PhoneInput, OTPInput } from "@/components/auth/OTPFlow";
 
@@ -20,7 +20,7 @@ export default function Signup() {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
-    role: '',
+    role: 'resident',
     street: '',
   });
 
@@ -81,9 +81,15 @@ export default function Signup() {
         setStep(3);
         toast.success('OTP verified! Please complete your profile.');
       } else {
-        // Existing user logging in via signup page
         toast.success('Welcome back! Redirecting...');
-        navigate('/dashboard');
+        
+        if (response.data.user.role === 'admin') {
+          navigate('/admin/dashboard');
+        } else if (response.data.user.role === 'guard') {
+          navigate('/guard/dashboard');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Verification failed');
@@ -95,7 +101,7 @@ export default function Signup() {
   const handleCompleteProfile = async (e) => {
     e.preventDefault();
 
-    if (!formData.username || !formData.street) {
+    if (!formData.username || !formData.street || !formData.role) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -111,7 +117,14 @@ export default function Signup() {
       });
 
       toast.success('Profile updated successfully!');
-      navigate('/dashboard');
+      
+      if (formData.role === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (formData.role === 'guard') {
+        navigate('/guard/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update profile');
     } finally {
@@ -121,12 +134,11 @@ export default function Signup() {
 
   const handleGoogleSignup = () => {
     const BACKEND_URL = 'http://localhost:5000';
-    window.location.href = `${BACKEND_URL}/auth/google`;
+    window.location.href = `${BACKEND_URL}/auth/google?role=${formData.role}`;
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      {/* Step 1: Phone Number */}
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       {step === 1 && (
         <Card className="w-full max-w-md">
           <CardHeader>
@@ -170,12 +182,11 @@ export default function Signup() {
           </CardContent>
         </Card>
       )}
-
-      {/* Step 2: OTP Verification */}
+      
       {step === 2 && (
-        <Card>
+        <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Verify OTP</CardTitle>
+            <CardTitle className="text-center">Verify OTP</CardTitle>
           </CardHeader>
           <CardContent>
             <OTPInput
@@ -189,65 +200,97 @@ export default function Signup() {
           </CardContent>
         </Card>
       )}
-
-      {/* Step 3: Complete Profile */}
+      
       {step === 3 && (
-        <Card>
+        <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Complete Your Profile</CardTitle>
+            <CardTitle className="text-center">Complete Your Profile</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCompleteProfile} className="space-y-4">
+              {/* Full Name */}
               <div>
-                <Label htmlFor="username">Full Name</Label>
+                <Label htmlFor="username">Full Name <span className="text-red-500">*</span></Label>
                 <Input
                   id="username"
                   name="username"
                   type="text"
                   onChange={handleInputChange}
                   value={formData.username}
+                  placeholder="John Kamau"
                   disabled={loading}
                   required
                 />
               </div>
 
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email (Optional)</Label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
                   onChange={handleInputChange}
                   value={formData.email}
+                  placeholder="john@example.com"
                   disabled={loading}
                 />
               </div>
 
-              <Select
-              onValueChange={(value) => setFormData(prev => ({...prev, [formData.role]: value}))}
-              value = {formData.role}
-              >
-                <SelectTrigger className='w-full'>
-                  <SelectValue placeholder="Enter role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="guard">Guard</SelectItem>
-                    <SelectItem value="resident">Resident</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="caretaker">Caretaker</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <div>
+                <Label htmlFor="role">Select Your Role <span className="text-red-500">*</span></Label>
+                <Select
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}
+                  value={formData.role}
+                  disabled={loading}
+                >
+                  <SelectTrigger className='w-full mt-1'>
+                    <SelectValue placeholder="Choose your role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="resident">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4" />
+                          <div>
+                            <p className="font-medium">Resident</p>
+                            <p className="text-xs text-gray-500">Community member</p>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      
+                      <SelectItem value="guard">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4" />
+                          <div>
+                            <p className="font-medium">Security Guard</p>
+                            <p className="text-xs text-gray-500">Security personnel</p>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      
+                      <SelectItem value="admin">
+                        <div className="flex items-center gap-2">
+                          <UserCircle className="w-4 h-4" />
+                          <div>
+                            <p className="font-medium">Administrator</p>
+                            <p className="text-xs text-gray-500">Portal admin access</p>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div>
-                <Label htmlFor="street">Street Name</Label>
+                <Label htmlFor="street">Street Address <span className="text-red-500">*</span></Label>
                 <Input
                   id="street"
                   name="street"
                   type="text"
                   onChange={handleInputChange}
                   value={formData.street}
+                  placeholder="House 15, Gituamba Lane"
                   disabled={loading}
                   required
                 />
@@ -261,6 +304,7 @@ export default function Signup() {
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="animate-spin" />
+                    <span>Completing...</span>
                   </span>
                 ) : (
                   'Complete Signup'

@@ -2,11 +2,11 @@ const mongoose = require("mongoose")
 
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true},
-    email: { type : String, required: true, unique: true, sparse: true},
+    email: { type : String, unique: true, sparse: true},
     password: { type: String, required: function() { return !this.googleId && !this.phone}},
     googleId: { type: String, unique: true, sparse: true},
     phone: { type: String, unique: true, sparse: true},
-    role: { type: String, required: true, enum: ['guard', 'resident', 'admin', 'owner', 'caretaker'], default: 'owner'},
+    role: { type: String, required: true, enum: ['guard', 'resident', 'admin'], default: 'resident'},
     subStatus: { type: String, required: true, default: 'unpaid'},
     lastPayment: { type: Date, default: null},
     otp: { code: String, expiresAt: Date},
