@@ -85,6 +85,7 @@ app.use('/api/user', require('./routes/userSettingsRoutes'));
 app.use('/api/projects', require('./routes/projectRoutes'));
 app.use('/api/discussions', require('./routes/discussionRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/admin/subscriptions', require('./routes/adminSubscriptionRoutes'));
 
 const PORT = process.env.PORT || 5000;
 

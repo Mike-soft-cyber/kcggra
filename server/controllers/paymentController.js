@@ -1,274 +1,200 @@
-const Payment = require('../models/Payments')
-const User = require('../models/User')
-const Project = require('../models/Projects')
-const { stkPush, stkQuery } = require('../services/mpesaService')
-const { sendConfirmationPayment} = require('../services/smsService')
-const moment = require('moment')
+const Payment = require('../models/Payments');
+const User = require('../models/User');
+const Project = require('../models/Projects');
+const cloudinary = require('../config/cloudinary');
 
-exports.initiateSubscription = async(req, res) => {
-    try {
-        const { phone, monthYear } = req.body
-        const user = req.user
-
-        const paymentPhone = phone || user.phone
-
-        if(!paymentPhone){
-            return res.status(400).json({
-                success: false,
-                message: 'Phone number is required'
-            })
-        }
-
-        const month_year = monthYear || moment().format('MMM-YYYY').toUpperCase()
-
-        const existingPayment = await Payment.findOne({
-            user: user._id,
-            monthYear: month_year,
-            type: 'subscription',
-            status: 'completed'
-        })
-
-        if(existingPayment){
-            return res.status(400).json({
-                success: false,
-                message: `You have already paid for ${monthYear}`
-            })
-        }
-
-        const amount = parseInt(process.env.YEARLY_SUBSCRIPTION)
-
-        const payment = await Payment.create({
-            user: user._id,
-            amount,
-            type: 'subscription',
-            monthYear: month_year,
-            method: 'mpesa',
-            phone: paymentPhone,
-            status: 'pending',
-            transaction_id: `PENDING-${Date.now()}`
-        })
-
-        const stkResponse = await stkPush({
-            phone: paymentPhone,
-            amount,
-            accountReference: `SUB-${month_year}`,
-            transactionDesc: `KCGGRA Subscription - ${month_year}`
-        })
-
-        payment.transaction_id = stkResponse.checkoutRequestID
-        await payment.save()
-
-        res.status(200).json({
-            success: true,
-            message: 'Payment request sent to phone',
-            payment: {
-                _id: payment._id,
-                amount,
-                monthYear: month_year,
-                checkoutRequestID: stkResponse.checkoutRequestID
-            }
-        })
-    } catch (error) {
-        console.error('❌ Initiate subscription error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to initiate payment',
-        });
-    }
-}
-
-exports.donateProject = async(req, res) => {
-    try {
-        const {phone, amount, projectName} = req.body
-        const user = req.user
-
-        if(!amount || amount < 100){
-            return res.status(400).json({
-                success: false,
-                message: 'Minimum donation is KES 100',
-            });
-        }
-
-        const paymentPhone = phone || user.phone
-
-        const payment = await Payment.create({
-            user: user._id,
-            amount,
-            type: 'project_donation',
-            method: 'mpesa',
-            phone: paymentPhone,
-            status: 'pending',
-            transaction_id: `PENDING-${Date.now()}`
-        })
-
-        const stkResponse = await stkPush({
-            phone: paymentPhone,
-            amount,
-            accountReference: projectName,
-            transactionDesc: `Project Donation - ${projectName || 'General Fund'}`
-        })
-
-        payment.transaction_id = stkResponse.checkoutRequestID
-        await payment.save()
-
-        res.status(200).json({
-             success: true,
-             message: 'Donation request sent to your phone',
-             payment: {
-                _id: payment._id,
-                amount,
-                checkoutRequestID: stkResponse.checkoutRequestID,
-            },
-        })
-    } catch (error) {
-        console.error('CapEx donation error:', error)
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to initiate donation',
-        });
-    }
-}
-
-exports.mpesaCallback = async (req, res) => {
+exports.createSubscriptionPayment = async (req, res) => {
   try {
-    console.log('M-Pesa Callback received:', JSON.stringify(req.body, null, 2));
-
-    const { Body } = req.body;
-    const { stkCallback } = Body || {};
-
-    if (!stkCallback) {
-      console.error('Invalid callback format');
-      return res.status(400).json({ success: false, message: 'Invalid callback' });
-    }
-
     const {
-      MerchantRequestID,
-      CheckoutRequestID,
-      ResultCode,
-      ResultDesc,
-      CallbackMetadata,
-    } = stkCallback;
+      amount,
+      payment_method,
+      mpesa_receipt,
+      mpesa_phone,
+      bank_name,
+      account_number,
+      reference_number,
+      deposit_date,
+      notes,
+    } = req.body;
 
-    const payment = await Payment.findOne({ transaction_id: CheckoutRequestID });
+    const user_id = req.user._id;
 
-    if (!payment) {
-      console.error('Payment not found for CheckoutRequestID:', CheckoutRequestID);
-      return res.status(404).json({ success: false, message: 'Payment not found' });
-    }
-
-    if (ResultCode === 0) {
-      const metadata = CallbackMetadata?.Item || [];
-      
-      const amountPaid = metadata.find((item) => item.Name === 'Amount')?.Value;
-      const mpesaReceipt = metadata.find((item) => item.Name === 'MpesaReceiptNumber')?.Value;
-      const transactionDate = metadata.find((item) => item.Name === 'TransactionDate')?.Value;
-      const phoneNumber = metadata.find((item) => item.Name === 'PhoneNumber')?.Value;
-
-      payment.status = 'completed';
-      payment.mpesa_receipt = mpesaReceipt;
-      payment.transaction_id = mpesaReceipt;
-      await payment.save();
-
-      const user = await User.findById(payment.user_id);
-      if (user) {
-        user.subStatus = 'paid';
-        user.lastPayment = new Date();
-        await user.save();
-      }
-
-      if (payment.payment_type === 'project_donation') {
-        let project = await Project.findOne({ status: 'active' });
-
-        project.currentAmount += payment.amount;
-        project.contributors.push({
-          user: payment.user_id,
-          amount: payment.amount,
-          payment: payment._id,
-          date: new Date(),
-        });
-        await project.save();
-
-        console.log(`Project fund updated: +${payment.amount} KES (Total: ${project.current_amount})`);
-      }
-
-      try {
-        await sendPaymentConfirmation(
-          `+${phoneNumber}`,
-          amountPaid,
-          mpesaReceipt
-        );
-      } catch (smsError) {
-        console.error('❌ Failed to send SMS confirmation:', smsError);
-      }
-
-      const io = req.app.get('io');
-      io.to(`user-${payment.user_id}`).emit('payment-success', {
-        payment,
-        message: 'Payment received successfully!',
+    // Validate amount
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment amount',
       });
-
-      console.log(`Payment completed: ${mpesaReceipt} - KES ${amountPaid}`);
-    } else {
-      payment.status = 'failed';
-      await payment.save();
-
-      console.log(`Payment failed: ${ResultDesc}`);
     }
 
-    res.status(200).json({ success: true, message: 'Callback processed' });
-  } catch (error) {
-    console.error('M-Pesa callback error:', error);
-    res.status(200).json({ success: true, message: 'Callback received' });
-  }
-};
+    const MONTHLY_SUBSCRIPTION = 5000;
 
-exports.getPaymentHistory = async (req, res) => {
-  try {
-    const payments = await Payment.find({ user_id: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(50);
+    const is_partial = amount < MONTHLY_SUBSCRIPTION;
+    const subscription_balance = Math.max(0, MONTHLY_SUBSCRIPTION - amount);
 
-    res.status(200).json({
+    const payment = await Payment.create({
+      user_id,
+      payment_type: is_partial ? 'partial_subscription' : 'subscription',
+      amount,
+      payment_method,
+      mpesa_receipt,
+      mpesa_phone,
+      bank_details: bank_name ? {
+        bank_name,
+        account_number,
+        reference_number,
+        deposit_date: deposit_date || new Date(),
+      } : undefined,
+      is_partial,
+      subscription_balance,
+      notes,
+      status: payment_method === 'mpesa' ? 'verified' : 'pending', 
+    });
+
+    // If bank slip photo provided
+    if (req.file) {
+      payment.bank_slip_photo = req.file.path;
+      await payment.save();
+    }
+
+    // If M-Pesa or full payment, update user status immediately
+    if (payment_method === 'mpesa' && !is_partial) {
+      await updateUserSubscription(user_id, amount);
+    }
+
+    res.status(201).json({
       success: true,
-      count: payments.length,
-      payments,
+      message: is_partial 
+        ? `Partial payment of KES ${amount} received. Balance: KES ${subscription_balance}`
+        : payment_method === 'bank'
+        ? 'Payment submitted for verification. You\'ll be notified once approved.'
+        : 'Payment successful!',
+      payment: {
+        _id: payment._id,
+        amount: payment.amount,
+        is_partial: payment.is_partial,
+        subscription_balance: payment.subscription_balance,
+        status: payment.status,
+        payment_method: payment.payment_method,
+      },
     });
   } catch (error) {
-    console.error('Get payment history error:', error);
+    console.error('❌ Create subscription payment error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch payment history',
+      message: 'Failed to process payment',
       error: error.message,
     });
   }
 };
 
-exports.getAllPayments = async (req, res) => {
+exports.createCapExPayment = async (req, res) => {
   try {
-    const { status, type, limit = 100 } = req.query;
+    const {
+      project_id,
+      amount,
+      payment_method,
+      mpesa_receipt,
+      mpesa_phone,
+      bank_name,
+      account_number,
+      reference_number,
+      deposit_date,
+      notes,
+    } = req.body;
 
-    const filter = {};
+    const user_id = req.user._id;
+
+    // Validate project exists
+    const project = await Project.findById(project_id);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found',
+      });
+    }
+
+    // Create payment record
+    const payment = await Payment.create({
+      user_id,
+      payment_type: 'capex',
+      project_id,
+      amount,
+      payment_method,
+      mpesa_receipt,
+      mpesa_phone,
+      bank_details: bank_name ? {
+        bank_name,
+        account_number,
+        reference_number,
+        deposit_date: deposit_date || new Date(),
+      } : undefined,
+      notes,
+      status: payment_method === 'mpesa' ? 'verified' : 'pending',
+    });
+
+    if (req.file) {
+      payment.bank_slip_photo = req.file.path;
+      await payment.save();
+    }
+
+    // If M-Pesa, update project immediately
+    if (payment_method === 'mpesa') {
+      await updateProjectContribution(project_id, user_id, amount);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: payment_method === 'bank'
+        ? 'Contribution submitted for verification'
+        : 'Contribution successful!',
+      payment: {
+        _id: payment._id,
+        project_name: project.projectName,
+        amount: payment.amount,
+        status: payment.status,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Create CapEx payment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process contribution',
+      error: error.message,
+    });
+  }
+};
+
+exports.getMyPayments = async (req, res) => {
+  try {
+    const { type, status } = req.query;
+
+    const filter = { user_id: req.user._id };
+    if (type) filter.payment_type = type;
     if (status) filter.status = status;
-    if (type) filter.type = type;
 
     const payments = await Payment.find(filter)
-      .populate('user_id', 'username phone street')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
+      .populate('project_id', 'projectName targetAmount')
+      .sort({ createdAt: -1 });
 
-    const totalCompleted = await Payment.aggregate([
-      { $match: { status: 'completed' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]);
+    // Calculate totals
+    const totals = {
+      total_paid: payments
+        .filter(p => p.status === 'verified')
+        .reduce((sum, p) => sum + p.amount, 0),
+      pending_verification: payments
+        .filter(p => p.status === 'pending')
+        .reduce((sum, p) => sum + p.amount, 0),
+      subscription_balance: calculateSubscriptionBalance(req.user._id),
+    };
 
     res.status(200).json({
       success: true,
-      count: payments.length,
-      totalAmount: totalCompleted[0]?.total || 0,
       payments,
+      totals,
     });
   } catch (error) {
-    console.error('Get all payments error:', error);
+    console.error('❌ Get payments error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch payments',
@@ -276,11 +202,73 @@ exports.getAllPayments = async (req, res) => {
   }
 };
 
-exports.checkPaymentStatus = async (req, res) => {
+exports.getPaymentSummary = async (req, res) => {
   try {
-    const { checkoutRequestID } = req.params;
+    const user = await User.findById(req.user._id);
 
-    const payment = await Payment.findOne({ transaction_id: checkoutRequestID });
+    // Get all verified payments
+    const verifiedPayments = await Payment.find({
+      user_id: req.user._id,
+      status: 'verified',
+    });
+
+    // Calculate subscription balance
+    const MONTHLY_SUBSCRIPTION = 5000;
+    const subscriptionPayments = verifiedPayments.filter(
+      p => p.payment_type === 'subscription' || p.payment_type === 'partial_subscription'
+    );
+    
+    const totalPaidForSubscription = subscriptionPayments.reduce(
+      (sum, p) => sum + p.amount,
+      0
+    );
+
+    const subscriptionBalance = Math.max(0, MONTHLY_SUBSCRIPTION - totalPaidForSubscription);
+
+    // CapEx contributions
+    const capexContributions = verifiedPayments.filter(p => p.payment_type === 'capex');
+    const totalCapexContributed = capexContributions.reduce((sum, p) => sum + p.amount, 0);
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        subscription: {
+          monthly_fee: MONTHLY_SUBSCRIPTION,
+          total_paid: totalPaidForSubscription,
+          balance: subscriptionBalance,
+          status: user.subStatus,
+          last_payment: user.lastPayment,
+        },
+        capex: {
+          total_contributed: totalCapexContributed,
+          projects_count: [...new Set(capexContributions.map(p => p.project_id))].length,
+        },
+        overall: {
+          total_paid: totalPaidForSubscription + totalCapexContributed,
+          pending_verification: await Payment.countDocuments({
+            user_id: req.user._id,
+            status: 'pending',
+          }),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Get payment summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch payment summary',
+    });
+  }
+};
+
+exports.verifyPayment = async (req, res) => {
+  try {
+    const { payment_id } = req.params;
+    const { status, rejection_reason } = req.body;
+
+    const payment = await Payment.findById(payment_id)
+      .populate('user_id', 'username phone email')
+      .populate('project_id', 'projectName');
 
     if (!payment) {
       return res.status(404).json({
@@ -289,77 +277,118 @@ exports.checkPaymentStatus = async (req, res) => {
       });
     }
 
-    if (payment.status === 'pending') {
-      const queryResult = await stkQuery({ checkoutRequestID });
-      
-      if (queryResult.ResultCode === '0') {
-        payment.status = 'completed';
-        await payment.save();
-      } else if (queryResult.ResultCode !== '1032') {
-        payment.status = 'failed';
-        await payment.save();
+    payment.status = status;
+    payment.verified_by = req.user._id;
+    payment.verified_at = new Date();
+
+    if (status === 'rejected') {
+      payment.rejection_reason = rejection_reason;
+    }
+
+    await payment.save();
+
+    // If verified, update user/project
+    if (status === 'verified') {
+      if (payment.payment_type === 'subscription' || payment.payment_type === 'partial_subscription') {
+        await updateUserSubscription(payment.user_id._id, payment.amount);
+      } else if (payment.payment_type === 'capex') {
+        await updateProjectContribution(payment.project_id, payment.user_id._id, payment.amount);
       }
     }
 
+    console.log(`✅ Payment ${payment._id} ${status} by admin ${req.user.username}`);
+
     res.status(200).json({
       success: true,
+      message: `Payment ${status}`,
       payment,
     });
   } catch (error) {
-    console.error(' Check payment status error:', error);
+    console.error('❌ Verify payment error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to check payment status',
+      message: 'Failed to verify payment',
     });
   }
 };
 
-exports.getProjectProgress = async (req, res) => {
+exports.getPendingPayments = async (req, res) => {
   try {
-    const projectFund = await Project.findOne({ status: 'active' })
-      .populate('contributors.user_id', 'username');
-
-    if (!projectFund) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active Project fund found',
-      });
-    }
-
-    const progressPercentage = ((projectFund.currentAmount / projectFund.targetAmount) * 100).toFixed(2);
-
-    res.status(200).json({
-      success: true,
-      projectFund: {
-        ...projectFund.toObject(),
-        progressPercentage,
-      },
-    });
-  } catch (error) {
-    console.error('Get Project progress error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch Project progress',
-    });
-  }
-};
-
-exports.getAllProjects = async (req, res) => {
-  try {
-    const projects = await Project.find()
-      .populate('contributors.user', 'username')
+    const payments = await Payment.find({ status: 'pending' })
+      .populate('user_id', 'username phone email street')
+      .populate('project_id', 'projectName')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
-      count: projects.length,
-      projects,
+      count: payments.length,
+      payments,
     });
   } catch (error) {
-    console.error('Get projects error:', error);
+    console.error('Get pending payments error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch projects',
+      message: 'Failed to fetch pending payments',
     });
   }
 };
+
+async function updateUserSubscription(userId, amount) {
+  const user = await User.findById(userId);
+  
+  const MONTHLY_SUBSCRIPTION = 5000;
+  
+  // Get all verified subscription payments
+  const allPayments = await Payment.find({
+    user_id: userId,
+    payment_type: { $in: ['subscription', 'partial_subscription'] },
+    status: 'verified',
+  });
+
+  const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  if (totalPaid >= MONTHLY_SUBSCRIPTION) {
+    user.subStatus = 'paid';
+    user.lastPayment = new Date();
+    await user.save();
+    console.log(`✅ ${user.username} subscription marked as PAID (total: KES ${totalPaid})`);
+  } else {
+    console.log(`⏳ ${user.username} partial payment (KES ${totalPaid}/${MONTHLY_SUBSCRIPTION})`);
+  }
+}
+
+async function updateProjectContribution(projectId, userId, amount) {
+  const project = await Project.findById(projectId);
+  
+  project.currentAmount += amount;
+  
+  const contributorIndex = project.contributors.findIndex(
+    c => c.user_id.toString() === userId.toString()
+  );
+
+  if (contributorIndex >= 0) {
+    project.contributors[contributorIndex].amount += amount;
+  } else {
+    project.contributors.push({
+      user_id: userId,
+      amount,
+      date: new Date(),
+    });
+  }
+
+  await project.save();
+  console.log(`✅ CapEx contribution: KES ${amount} to ${project.projectName}`);
+}
+
+async function calculateSubscriptionBalance(userId) {
+  const MONTHLY_SUBSCRIPTION = 5000;
+  
+  const payments = await Payment.find({
+    user_id: userId,
+    payment_type: { $in: ['subscription', 'partial_subscription'] },
+    status: 'verified',
+  });
+
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  return Math.max(0, MONTHLY_SUBSCRIPTION - totalPaid);
+}

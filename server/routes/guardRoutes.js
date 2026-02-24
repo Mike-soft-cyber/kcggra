@@ -20,5 +20,10 @@ router.get(
 );
 
 router.get('/all', authorize('admin'), guardController.getAllGuards);
+router.get('/stats', guardController.getGuardStats);
+router.get('/current-shift', guardController.getCurrentShift);
+router.post('/start-shift', authorize('guard'), guardController.startShift);
+router.post('/end-shift', authorize('guard'), guardController.endShift);
+router.get('/on-duty', authorize('admin'), guardController.getOnDutyGuards);
 
 module.exports = router;

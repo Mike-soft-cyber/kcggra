@@ -20,6 +20,8 @@ import AdminDashboard from './pages/AdminDashboard'
 import AdminSubscriptions from './pages/AdminSubscriptions'
 import AdminCapEx from './pages/AdminCapEx'
 import AdminResidents from './pages/AdminResidents'
+import GuardDashboard from './pages/GuardDashboard'
+import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
   return (
@@ -34,10 +36,19 @@ export default function App() {
         <Route path="/visitor/:visitor_id" element={<PublicVisitorQR />} />
 
         {/* Protected Dashboard Routes */}
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard"
+        element={
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  }  />
         
         {/* Incidents */}
-        <Route path="/dashboard/incidents" element={<Incident />} />
+        <Route path="/dashboard/incidents" element={
+  <ProtectedRoute>
+    <Incident />
+  </ProtectedRoute>
+} />
         <Route path="/dashboard/incidents/:id" element={<IncidentDetail />} />
         
         {/* Payments */}
@@ -53,6 +64,7 @@ export default function App() {
         <Route path="/qrCode" element={<Navigate to="/dashboard/visitors" replace />} />
         
         {/* Guard Map */}
+        <Route path="/guard/dashboard" element={<GuardDashboard />} />
         <Route path="/dashboard/guard-map" element={<GuardMapPage />} />
         
         {/* Announcements */}

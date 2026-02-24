@@ -290,28 +290,31 @@ exports.cancelVisitor = async (req, res) => {
   }
 };
 
+// Remove all 3 duplicates and keep only this one:
 exports.getActiveVisitors = async (req, res) => {
   try {
-    const today = moment().startOf('day').toDate();
-    const endOfDay = moment().endOf('day').toDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
     const visitors = await Visitor.find({
-      visit_date: { $gte: today, $lte: endOfDay },
-      status: { $in: ['pending', 'checked_in'] },
+      visit_date: { $gte: today, $lt: tomorrow },
+      status: { $in: ['pending', 'checked_in'] }, // ✅ Fixed from 'approved'
     })
-      .populate('host_id', 'username phone street')
-      .sort({ visit_date: 1 });
+      .populate('host_id', 'username phone street') // ✅ Fixed from 'resident_id'
+      .sort({ visit_date: -1 });
 
     res.status(200).json({
       success: true,
-      count: visitors.length,
       visitors,
+      count: visitors.length,
     });
   } catch (error) {
     console.error('❌ Get active visitors error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch active visitors',
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
     });
   }
 };
