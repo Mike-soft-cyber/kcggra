@@ -5,19 +5,28 @@ const Incident = require('../models/Incident');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    // Total residents
-    const totalResidents = await User.countDocuments({ role: { $in: ['owner', 'resident'] } });
+    // ✅ Total residents ONLY (exclude guards and admins)
+    const totalResidents = await User.countDocuments({ 
+      role: 'resident' // Only residents pay
+    });
 
-    // Paid vs unpaid count
-    const paidCount = await User.countDocuments({ subStatus: 'paid' });
-    const unpaidCount = await User.countDocuments({ subStatus: 'unpaid' });
+    // ✅ Paid vs unpaid count (residents only)
+    const paidCount = await User.countDocuments({ 
+      role: 'resident',
+      subStatus: 'paid' 
+    });
     
-    // Collection rate
+    const unpaidCount = await User.countDocuments({ 
+      role: 'resident',
+      subStatus: 'unpaid' 
+    });
+    
+    // Collection rate (residents only)
     const collectionRate = totalResidents > 0 
       ? Math.round((paidCount / totalResidents) * 100) 
       : 0;
 
-    // Overdue accounts (unpaid)
+    // Overdue accounts (residents only)
     const overdueAccounts = unpaidCount;
 
     // Monthly revenue (current month)
@@ -28,7 +37,8 @@ exports.getDashboardStats = async (req, res) => {
     const monthlyPayments = await Payment.aggregate([
       {
         $match: {
-          status: 'completed',
+          status: 'verified',
+          payment_type: { $in: ['subscription', 'partial_subscription'] },
           createdAt: { $gte: startOfMonth },
         },
       },
@@ -50,7 +60,7 @@ exports.getDashboardStats = async (req, res) => {
       collectionRate,
       overdueAccounts,
       monthlyRevenue,
-      totalAmount: paidCount * 60000, // Assuming 60K per subscription
+      totalAmount: paidCount * 5000, // Monthly subscription
     });
   } catch (error) {
     console.error('Get dashboard stats error:', error);
@@ -63,19 +73,57 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getPaymentTrend = async (req, res) => {
   try {
-    const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
-    const currentYear = new Date().getFullYear();
-    const lastYear = currentYear - 1;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
 
-    // Generate chart data (you can replace with real aggregation)
-    const trend = [
-      { month: 'Sep', collected: 320000, target: 400000 },
-      { month: 'Oct', collected: 380000, target: 400000 },
-      { month: 'Nov', collected: 400000, target: 400000 },
-      { month: 'Dec', collected: 200000, target: 400000 },
-      { month: 'Jan', collected: 360000, target: 400000 },
-      { month: 'Feb', collected: 340000, target: 400000 },
-    ];
+    const sixMonthsAgo = new Date(currentYear, currentMonth - 5, 1);
+
+    // ✅ Only subscription payments (not CapEx)
+    const paymentsByMonth = await Payment.aggregate([
+      {
+        $match: {
+          status: 'verified',
+          payment_type: { $in: ['subscription', 'partial_subscription'] },
+          createdAt: { $gte: sixMonthsAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+          },
+          collected: { $sum: '$amount' },
+        },
+      },
+      {
+        $sort: { '_id.year': 1, '_id.month': 1 },
+      },
+    ]);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    const trend = [];
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(currentYear, currentMonth - i, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+
+      const monthData = paymentsByMonth.find(
+        p => p._id.year === year && p._id.month === month
+      );
+
+      // ✅ Calculate target based on number of residents
+      const totalResidents = await User.countDocuments({ role: 'resident' });
+      const target = totalResidents * 5000; // KES 5,000 per resident
+
+      trend.push({
+        month: monthNames[date.getMonth()],
+        collected: monthData?.collected || 0,
+        target: target,
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -92,13 +140,14 @@ exports.getPaymentTrend = async (req, res) => {
 
 exports.getAttentionNeeded = async (req, res) => {
   try {
+    // ✅ Only residents (guards/admins don't pay)
     const users = await User.find({
-      role: { $in: ['owner', 'resident'] },
+      role: 'resident',
       subStatus: { $in: ['unpaid', 'grace'] },
     })
       .select('username street subStatus phone email')
       .limit(10)
-      .sort({ subStatus: -1 }); // unpaid first
+      .sort({ subStatus: -1 });
 
     return res.status(200).json({
       success: true,
@@ -117,7 +166,8 @@ exports.getAllResidents = async (req, res) => {
   try {
     const { search, status } = req.query;
 
-    let query = { role: { $in: ['owner', 'resident'] } };
+    // ✅ Only residents
+    let query = { role: 'resident' };
 
     if (status && status !== 'all') {
       query.subStatus = status;
@@ -153,7 +203,8 @@ exports.getSubscriptions = async (req, res) => {
   try {
     const { filter } = req.query;
 
-    let query = { role: { $in: ['owner', 'resident'] } };
+    // ✅ Only residents
+    let query = { role: 'resident' };
 
     if (filter === 'paid') query.subStatus = 'paid';
     if (filter === 'overdue') query.subStatus = 'unpaid';
@@ -163,13 +214,12 @@ exports.getSubscriptions = async (req, res) => {
       .select('username email street subStatus lastPayment phone')
       .sort({ subStatus: 1, lastPayment: -1 });
 
-    // Calculate amounts paid
     const subscriptionsWithAmounts = await Promise.all(
       subscriptions.map(async (sub) => {
         const payments = await Payment.find({
           user_id: sub._id,
-          payment_type: 'subscription',
-          status: 'completed',
+          payment_type: { $in: ['subscription', 'partial_subscription'] },
+          status: 'verified',
         });
 
         const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -177,7 +227,7 @@ exports.getSubscriptions = async (req, res) => {
         return {
           ...sub.toObject(),
           paidAmount: totalPaid,
-          dueAmount: 60000, // Annual subscription
+          dueAmount: 5000,
           house: sub.street?.split(',')[0] || 'N/A',
         };
       })

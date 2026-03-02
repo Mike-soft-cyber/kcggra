@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
-  LayoutGrid, 
+  LayoutDashboard,
   CreditCard, 
   TrendingUp, 
   Users, 
   Settings,
   LogOut,
   Menu,
-  X
+  Receipt, 
 } from 'lucide-react';
 import API from '@/api';
 
@@ -47,11 +47,12 @@ export default function AdminLayout({ children }) {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutGrid },
-    { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
-    { name: 'CapEx Tracker', href: '/admin/capex', icon: TrendingUp },
-    { name: 'Residents', href: '/admin/residents', icon: Users },
-  ];
+  { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+  { name: 'Subscriptions', path: '/admin/subscriptions', icon: CreditCard },
+  { name: 'CapEx Tracker', path: '/admin/capex', icon: TrendingUp },
+  { name: 'Residents', path: '/admin/residents', icon: Users },
+  { name: 'Verify Payments', path: '/admin/payments/verify', icon: Receipt },
+];
 
   const isActive = (path) => location.pathname === path;
 
@@ -81,12 +82,12 @@ export default function AdminLayout({ children }) {
         <nav className="p-4 space-y-1">
           {navigation.map((item) => {
             const Icon = item.icon;
-            const active = isActive(item.href);
+            const active = isActive(item.path);
             
             return (
               <Link
                 key={item.name}
-                to={item.href}
+                to={item.path}
                 onClick={() => setSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-4 py-3 rounded-lg
@@ -107,7 +108,7 @@ export default function AdminLayout({ children }) {
         {/* Bottom Section */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
           <Link
-            to="/admin/settings"
+            to="/dashboard/settings"
             className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-white transition mb-2"
           >
             <Settings className="w-5 h-5" />

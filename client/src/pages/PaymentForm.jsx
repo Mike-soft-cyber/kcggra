@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, CreditCard, Building2, Loader2 } from 'lucide-react';
+import { Upload, CreditCard, Building2, Loader2, Phone } from 'lucide-react';
 import API from '@/api';
 import { toast } from 'sonner';
 
@@ -12,15 +12,14 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
   const [paymentMethod, setPaymentMethod] = useState('mpesa');
   const [bankSlip, setBankSlip] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [polling, setPolling] = useState(false);
   
   const MONTHLY_SUBSCRIPTION = 5000;
   
   const [formData, setFormData] = useState({
     amount: type === 'subscription' ? MONTHLY_SUBSCRIPTION : '',
-    mpesa_receipt: '',
     mpesa_phone: '',
     bank_name: '',
-    account_number: '',
     reference_number: '',
     deposit_date: '',
     notes: '',
@@ -46,24 +45,108 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
     }
   };
 
-  const handleSubmit = async (e) => {
+  // ✅ M-Pesa STK Push
+  const handleMpesaPayment = async (e) => {
     e.preventDefault();
 
-    // Validation
-    if (paymentMethod === 'mpesa' && !formData.mpesa_receipt) {
-      toast.error('Please enter M-Pesa receipt number');
+    const phone = formData.mpesa_phone.startsWith('254') 
+      ? formData.mpesa_phone 
+      : `254${formData.mpesa_phone.replace(/^0/, '')}`;
+
+    if (phone.length !== 12) {
+      toast.error('Please enter a valid phone number');
       return;
     }
 
-    if (paymentMethod === 'bank') {
-      if (!formData.bank_name || !formData.reference_number) {
-        toast.error('Please fill in all bank details');
-        return;
+    if (!formData.amount || formData.amount < 1) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await API.post('/payments/mpesa/initiate', {
+        phone,
+        amount: parseInt(formData.amount),
+        payment_type: type,
+        project_id: projectId,
+      });
+
+      toast.success('Check your phone for M-Pesa prompt! 📱');
+      
+      // Start polling for payment status
+      pollPaymentStatus(response.data.payment.checkoutRequestID);
+      
+    } catch (error) {
+      console.error('M-Pesa error:', error);
+      toast.error(error.response?.data?.message || 'Payment failed');
+      setLoading(false);
+    }
+  };
+
+  // Poll payment status
+  const pollPaymentStatus = (checkoutRequestID) => {
+  setPolling(true);
+  let attempts = 0;
+  const maxAttempts = 24; // 2 minutes (24 * 5 seconds)
+
+  const interval = setInterval(async () => {
+    try {
+      attempts++;
+
+      const response = await API.get(`/payments/mpesa/status/${checkoutRequestID}`);
+      const { payment } = response.data;
+
+      // ✅ SUCCESS
+      if (payment.status === 'verified') {
+        clearInterval(interval);
+        setLoading(false);
+        setPolling(false);
+        toast.success('Payment successful! 🎉');
+        if (onSuccess) onSuccess(payment);
+      } 
+      // ❌ FAILED
+      else if (payment.status === 'failed') {
+        clearInterval(interval);
+        setLoading(false);
+        setPolling(false);
+        
+        const reason = payment.rejection_reason || 'Payment was not completed';
+        
+        if (reason.includes('insufficient') || reason.includes('Insufficient')) {
+          toast.error('Insufficient funds. Please check your M-Pesa balance.');
+        } else if (reason.includes('cancel') || reason.includes('Cancel')) {
+          toast.error('Payment cancelled.');
+        } else {
+          toast.error(`Payment failed: ${reason}`);
+        }
       }
-      if (!bankSlip) {
-        toast.error('Please upload bank slip photo');
-        return;
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        setLoading(false);
+        setPolling(false);
+        toast.error('Timed out. Please check your payment status.');
       }
+    } catch (error) {
+      console.error('Poll error:', error);
+    }
+  }, 5000);
+};
+
+  // Bank Payment
+  const handleBankPayment = async (e) => {
+    e.preventDefault();
+
+    if (!formData.bank_name || !formData.reference_number) {
+      toast.error('Please fill in all bank details');
+      return;
+    }
+
+    if (!bankSlip) {
+      toast.error('Please upload bank slip photo');
+      return;
     }
 
     setLoading(true);
@@ -71,36 +154,23 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
     try {
       const formDataToSend = new FormData();
       
-      // Add form fields
       formDataToSend.append('amount', formData.amount);
-      formDataToSend.append('payment_method', paymentMethod);
+      formDataToSend.append('payment_type', type);
       
       if (type === 'capex') {
         formDataToSend.append('project_id', projectId);
       }
 
-      // M-Pesa fields
-      if (paymentMethod === 'mpesa') {
-        formDataToSend.append('mpesa_receipt', formData.mpesa_receipt);
-        formDataToSend.append('mpesa_phone', formData.mpesa_phone);
-      }
-
-      // Bank fields
-      if (paymentMethod === 'bank') {
-        formDataToSend.append('bank_name', formData.bank_name);
-        formDataToSend.append('account_number', formData.account_number || '');
-        formDataToSend.append('reference_number', formData.reference_number);
-        formDataToSend.append('deposit_date', formData.deposit_date || new Date().toISOString());
-        formDataToSend.append('bank_slip', bankSlip);
-      }
+      formDataToSend.append('bank_name', formData.bank_name);
+      formDataToSend.append('reference_number', formData.reference_number);
+      formDataToSend.append('deposit_date', formData.deposit_date || new Date().toISOString());
+      formDataToSend.append('bank_slip', bankSlip);
 
       if (formData.notes) {
         formDataToSend.append('notes', formData.notes);
       }
 
-      // Send to appropriate endpoint
-      const endpoint = type === 'capex' ? '/payments/capex' : '/payments/subscription';
-      const response = await API.post(endpoint, formDataToSend, {
+      const response = await API.post('/payments/bank', formDataToSend, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -111,10 +181,8 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
       // Reset form
       setFormData({
         amount: type === 'subscription' ? MONTHLY_SUBSCRIPTION : '',
-        mpesa_receipt: '',
         mpesa_phone: '',
         bank_name: '',
-        account_number: '',
         reference_number: '',
         deposit_date: '',
         notes: '',
@@ -123,10 +191,18 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
       setPreviewUrl(null);
       
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Bank payment error:', error);
       toast.error(error.response?.data?.message || 'Payment failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    if (paymentMethod === 'mpesa') {
+      handleMpesaPayment(e);
+    } else {
+      handleBankPayment(e);
     }
   };
 
@@ -148,7 +224,7 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
           required
           className="mt-1"
         />
-        {type === 'subscription' && formData.amount < MONTHLY_SUBSCRIPTION && (
+        {type === 'subscription' && formData.amount < MONTHLY_SUBSCRIPTION && formData.amount > 0 && (
           <p className="text-xs text-orange-600 mt-1">
             ⚠️ Partial payment: Balance KES {MONTHLY_SUBSCRIPTION - formData.amount} remaining
           </p>
@@ -164,20 +240,20 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
       <div>
         <Label>Payment Method <span className="text-red-500">*</span></Label>
         <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-          <SelectTrigger className="mt-1">
+          <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="mpesa">
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
-                M-Pesa (Instant Verification)
+                <Phone className="w-4 h-4" />
+                M-Pesa
               </div>
             </SelectItem>
             <SelectItem value="bank">
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                Bank Deposit (Requires Verification)
+                Bank Transfer (Requires Verification)
               </div>
             </SelectItem>
           </SelectContent>
@@ -186,35 +262,28 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
 
       {/* M-Pesa Fields */}
       {paymentMethod === 'mpesa' && (
-        <>
-          <div>
-            <Label htmlFor="mpesa_receipt">M-Pesa Receipt Number <span className="text-red-500">*</span></Label>
-            <Input
-              id="mpesa_receipt"
-              name="mpesa_receipt"
-              value={formData.mpesa_receipt}
-              onChange={handleInputChange}
-              placeholder="e.g., RGX1234ABCD"
-              required
-              className="mt-1"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Paybill: 247247 | Account: Your phone number
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="mpesa_phone">M-Pesa Phone Number</Label>
+        <div>
+          <Label htmlFor="mpesa_phone">M-Pesa Phone Number <span className="text-red-500">*</span></Label>
+          <div className="flex gap-2 mt-1">
+            <span className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-medium">
+              +254
+            </span>
             <Input
               id="mpesa_phone"
               name="mpesa_phone"
+              type="tel"
               value={formData.mpesa_phone}
-              onChange={handleInputChange}
-              placeholder="254712345678"
-              className="mt-1"
+              onChange={(e) => setFormData({...formData, mpesa_phone: e.target.value.replace(/\D/g, '').slice(0, 9)})}
+              placeholder="712345678"
+              maxLength={9}
+              required
+              className="flex-1"
             />
           </div>
-        </>
+          <p className="text-xs text-gray-500 mt-1">
+            You'll receive an Mpesa prompt on this number
+          </p>
+        </div>
       )}
 
       {/* Bank Fields */}
@@ -226,7 +295,7 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
               value={formData.bank_name}
               onValueChange={(value) => setFormData({ ...formData, bank_name: value })}
             >
-              <SelectTrigger className="mt-1">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select bank" />
               </SelectTrigger>
               <SelectContent>
@@ -328,18 +397,24 @@ export default function PaymentForm({ type = 'subscription', projectId, onSucces
       {/* Submit */}
       <Button
         type="submit"
-        disabled={loading}
+        disabled={loading || polling}
         className="w-full bg-green-600 hover:bg-green-700"
       >
-        {loading ? (
+        {loading || polling ? (
           <span className="flex items-center justify-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Processing...
+            {polling ? 'Waiting for payment...' : 'Processing...'}
           </span>
         ) : (
-          `Submit Payment - KES ${formData.amount}`
+          `${paymentMethod === 'mpesa' ? 'Send' : 'Submit Payment'} - KES ${formData.amount}`
         )}
       </Button>
+
+      {paymentMethod === 'mpesa' && (
+        <p className="text-xs text-gray-500 text-center">
+          You'll receive a prompt on your phone. Enter M-Pesa PIN to complete.
+        </p>
+      )}
 
       {paymentMethod === 'bank' && (
         <p className="text-xs text-gray-500 text-center">

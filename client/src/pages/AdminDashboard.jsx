@@ -35,7 +35,25 @@ export default function AdminDashboard() {
       ]);
 
       setStats(statsRes.data);
-      setChartData(paymentsRes.data.trend || []);
+      
+      // ✅ Only show chart data if there are actual payments
+      const trendData = paymentsRes.data.trend || [];
+      const hasRealData = trendData.some(month => month.collected > 0);
+      
+      if (hasRealData) {
+        setChartData(trendData);
+      } else {
+        // ✅ Show empty/zero chart until real payments
+        setChartData([
+          { month: 'Jan', collected: 0, target: 0 },
+          { month: 'Feb', collected: 0, target: 0 },
+          { month: 'Mar', collected: 0, target: 0 },
+          { month: 'Apr', collected: 0, target: 0 },
+          { month: 'May', collected: 0, target: 0 },
+          { month: 'Jun', collected: 0, target: 0 },
+        ]);
+      }
+      
       setActiveProjects(projectsRes.data.projects?.slice(0, 2) || []);
       setAttentionNeeded(usersRes.data.users?.slice(0, 4) || []);
     } catch (error) {
@@ -69,10 +87,9 @@ export default function AdminDashboard() {
           <StatCard
             title="Total Residents"
             value={stats.totalResidents}
-            subtitle={`+2 this month`}
+            subtitle={stats.totalResidents > 0 ? `Active members` : 'No residents yet'}
             icon={Users}
             iconBg="bg-blue-50"
-            trend="up"
           />
           
           <StatCard
@@ -89,12 +106,11 @@ export default function AdminDashboard() {
             subtitle="Requires follow-up"
             icon={AlertTriangle}
             iconBg="bg-red-50"
-            trend="down"
           />
           
           <StatCard
             title="Monthly Revenue"
-            value={`KES ${(stats.monthlyRevenue / 1000).toFixed(0)}K`}
+            value={`KES ${stats.monthlyRevenue === 0 ? '0' : (stats.monthlyRevenue / 1000).toFixed(0) + 'K'}`}
             subtitle="Feb 2026"
             icon={TrendingUp}
             iconBg="bg-purple-50"
@@ -106,40 +122,49 @@ export default function AdminDashboard() {
           <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Collection Trend</h2>
             
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="month" 
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                />
-                <YAxis 
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                  tickFormatter={(value) => `${value / 1000}K`}
-                />
-                <Tooltip 
-                  formatter={(value) => [`KES ${value.toLocaleString()}`, 'Amount']}
-                  contentStyle={{ 
-                    backgroundColor: '#1a4d4d',
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: 'white'
-                  }}
-                />
-                <Bar 
-                  dataKey="collected" 
-                  fill="#1a4d4d" 
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={50}
-                />
-                <Bar 
-                  dataKey="target" 
-                  fill="#e5e7eb" 
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={50}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {/* ✅ Show message if no data */}
+            {chartData.every(d => d.collected === 0) ? (
+              <div className="flex flex-col items-center justify-center h-[300px] text-gray-400">
+                <TrendingUp className="w-16 h-16 mb-4" />
+                <p className="text-lg font-medium">No Collections Yet</p>
+                <p className="text-sm mt-1">Chart will appear once payments are made</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fill: '#6b7280', fontSize: 12 }}
+                  />
+                  <YAxis 
+                    tick={{ fill: '#6b7280', fontSize: 12 }}
+                    tickFormatter={(value) => `${value / 1000}K`}
+                  />
+                  <Tooltip 
+                    formatter={(value) => [`KES ${value.toLocaleString()}`, 'Amount']}
+                    contentStyle={{ 
+                      backgroundColor: '#1a4d4d',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: 'white'
+                    }}
+                  />
+                  <Bar 
+                    dataKey="collected" 
+                    fill="#1a4d4d" 
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={50}
+                  />
+                  <Bar 
+                    dataKey="target" 
+                    fill="#e5e7eb" 
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={50}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {/* Attention Needed */}
@@ -178,48 +203,56 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-6">Active CapEx Campaigns</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {activeProjects.map((project) => {
-              const progressPercent = ((project.currentAmount / project.targetAmount) * 100).toFixed(0);
-              
-              return (
-                <div 
-                  key={project._id}
-                  className="border border-gray-200 rounded-lg p-6 hover:border-[#1a4d4d] transition cursor-pointer"
-                  onClick={() => navigate('/admin/capex')}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-bold text-gray-900 mb-1">{project.projectName}</h3>
-                      <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
-                    </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                      Active
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">KES {project.currentAmount.toLocaleString()} raised</span>
-                      <span className="font-bold text-[#1a4d4d]">{progressPercent}%</span>
-                    </div>
-                    
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div 
-                        className="bg-gradient-to-r from-[#1a4d4d] to-[#0f3333] h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(progressPercent, 100)}%` }}
-                      />
+          {activeProjects.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3" />
+              <p className="font-medium">No Active Projects</p>
+              <p className="text-sm mt-1">CapEx campaigns will appear here</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {activeProjects.map((project) => {
+                const progressPercent = ((project.currentAmount / project.targetAmount) * 100).toFixed(0);
+                
+                return (
+                  <div 
+                    key={project._id}
+                    className="border border-gray-200 rounded-lg p-6 hover:border-[#1a4d4d] transition cursor-pointer"
+                    onClick={() => navigate('/admin/capex')}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-bold text-gray-900 mb-1">{project.projectName}</h3>
+                        <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
+                      </div>
+                      <span className="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                        Active
+                      </span>
                     </div>
 
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>{project.contributors?.length || 0} contributors</span>
-                      <span>Target: KES {(project.targetAmount / 1000000).toFixed(2)}M</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">KES {project.currentAmount.toLocaleString()} raised</span>
+                        <span className="font-bold text-[#1a4d4d]">{progressPercent}%</span>
+                      </div>
+                      
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className="bg-gradient-to-r from-[#1a4d4d] to-[#0f3333] h-3 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{project.contributors?.length || 0} contributors</span>
+                        <span>Target: KES {(project.targetAmount / 1000000).toFixed(2)}M</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>

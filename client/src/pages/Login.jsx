@@ -43,29 +43,38 @@ export default function Login() {
   };
 
   const handleVerifyOTP = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  if (!otp || otp.length !== 6) {
+    toast.error('Please enter a valid 6-digit OTP');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const response = await API.post('/auth/verify-otp', {
+      phone: `254${phoneDigits}`,
+      otp,
+    });
+
+    toast.success('Login successful!');
+
+    const userRole = response.data.user.role;
     
-    if (!otp || otp.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await API.post('/auth/verify-otp', {
-        phone: `254${phoneDigits}`,
-        otp,
-      });
-
-      toast.success('Login successful!');
+    if (userRole === 'admin') {
+      navigate('/admin/dashboard');
+    } else if (userRole === 'guard') {
+      navigate('/guard/dashboard');
+    } else {
       navigate('/dashboard');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Verification failed');
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    toast.error(error.response?.data?.message || 'Verification failed');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGoogleLogin = () => {
     const BACKEND_URL = 'http://localhost:5000';

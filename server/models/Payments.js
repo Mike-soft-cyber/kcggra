@@ -30,6 +30,9 @@ const paymentSchema = new mongoose.Schema({
     required: true,
   },
 
+  checkoutRequestID: { type: String },
+  merchantRequestID: { type: String },
+
   mpesa_receipt: {
     type: String,
   },
@@ -53,9 +56,11 @@ const paymentSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['pending', 'verified', 'rejected'],
+    enum: ['pending', 'verified', 'failed', 'rejected'],
     default: 'pending',
   },
+
+  rejection_reason: { type: String },
 
   verified_by: {
     type: mongoose.Schema.Types.ObjectId,
