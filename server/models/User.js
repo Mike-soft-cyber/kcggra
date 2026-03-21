@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema({
     last_active: Date,
     login_time: Date,
   }],
+  active_shift: {
+    startTime: { type: Date, default: null },
+    incidents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Incident' }],
+    visitors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Visitor' }],
+},
 }, {timestamps: true})
 
 userSchema.index({ phone: 1 }, { unique: true, sparse: true });

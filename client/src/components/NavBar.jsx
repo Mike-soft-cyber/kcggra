@@ -45,7 +45,15 @@ const fetchNotifications = async () => {
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
-  const isActive = (href) => location === href;
+  const formatTimeAgo = (date) => {
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+  const isActive = (href) => location.pathname === href;
 
   const getInitials = (name) => {
     if (!name) return 'U';
@@ -162,7 +170,7 @@ const fetchNotifications = async () => {
               <div
                 key={notification._id}
                 onClick={() => {
-                  router.push(`/dashboard/announcements/${notification._id}`);
+                  navigate(`/dashboard/announcements/${notification._id}`);
                   setNotificationOpen(false);
                 }}
                 className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition"
@@ -212,7 +220,7 @@ const fetchNotifications = async () => {
           <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
             <button
               onClick={() => {
-                router.push('/dashboard/announcements');
+                navigate('/dashboard/announcements');
                 setNotificationOpen(false);
               }}
               className="text-sm text-green-600 hover:text-green-700 font-medium w-full text-center"

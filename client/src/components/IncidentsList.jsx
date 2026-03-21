@@ -110,7 +110,7 @@ export default function IncidentsList({ limit = 5, showAll = false }) {
             <div
               key={incident._id}
               className="p-6 hover:bg-gray-50 cursor-pointer transition"
-              onClick={() => router.push(`/dashboard/incidents/${incident._id}`)}
+              onClick={() => navigate(`/dashboard/incidents/${incident._id}`)}
             >
               <div className="flex gap-4">
                 {/* Incident Icon */}

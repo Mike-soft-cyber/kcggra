@@ -18,7 +18,7 @@ export default function CapExProgress() {
 
   const fetchProjects = async () => {
     try {
-      const response = await API.get('/payments/projects');
+      const response = await API.get('/projects');
       setProjects(response.data.projects);
     } catch (error) {
       console.error('Failed to fetch projects:', error);

@@ -14,7 +14,7 @@ const monthlySubscriptionReminder = cron.schedule(
       const unpaidUsers = await User.find({
         isActive: true,
         subStatus: 'unpaid',
-        role: { $in: ['owner', 'tenant'] },
+        role: { $in: ['resident'] },
       });
 
       console.log(`📧 Sending reminders to ${unpaidUsers.length} users...`);
@@ -50,7 +50,7 @@ const resetSubscriptionStatus = cron.schedule(
       console.log('🔄 Resetting subscription statuses...');
 
       const result = await User.updateMany(
-        { role: { $in: ['owner', 'tenant'] } },
+        { role: { $in: ['resident'] } },
         { $set: { subStatus: 'unpaid' } }
       );
 
@@ -74,7 +74,7 @@ const paymentDeadlineWarning = cron.schedule(
       const unpaidUsers = await User.find({
         isActive: true,
         subStatus: 'unpaid',
-        role: { $in: ['owner', 'tenant'] },
+        role: { $in: ['resident'] },
       });
 
       for (const user of unpaidUsers) {

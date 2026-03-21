@@ -89,13 +89,13 @@ app.use('/api/admin/subscriptions', require('./routes/adminSubscriptionRoutes'))
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════════');
   console.log(`🚀 KCGGRA Portal Server Started`);
   console.log('═══════════════════════════════════════════');
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Server URL: http://localhost:${PORT}`);
-  console.log(`💻 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log('📱 ✅ Server running on http://192.168.1.15:5000');
   console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⏳ Connecting...'}`);
   console.log('═══════════════════════════════════════════');
   

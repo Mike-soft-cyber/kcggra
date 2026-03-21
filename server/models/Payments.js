@@ -39,9 +39,7 @@ const paymentSchema = new mongoose.Schema({
   mpesa_phone: {
     type: String,
   },
-  transaction_id: {
-    type: String,
-  },
+  transaction_id: { type: String, unique: true, sparse: true },
 
   bank_details: {
     bank_name: String,

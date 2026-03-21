@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import ProtectedRoute from './components/ProtectedRoute'
 
 // Public Pages
 import Login from './pages/Login'
@@ -42,36 +43,122 @@ export default function App() {
         <Route path="/visitor/:visitor_id" element={<PublicVisitorQR />} />
 
         {/* RESIDENT DASHBOARD */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dashboard/incidents" element={<Incident />} />
-        <Route path="/dashboard/incidents/:id" element={<IncidentDetail />} />
-        <Route path="/dashboard/payments" element={<Payments />} />
-        <Route path="/dashboard/community" element={<Community />} />
-        <Route path="/dashboard/visitors" element={<Visitors />} />
-        <Route path="/dashboard/visitors/:visitor_id" element={<VisitorQR />} />
+        <Route path="/dashboard" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/incidents" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Incident />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/incidents/:id" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <IncidentDetail />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/payments" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Payments />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/community" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Community />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/visitors" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Visitors />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/visitors/:visitor_id" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <VisitorQR />
+          </ProtectedRoute>
+        } />
         <Route path="/qrCode" element={<Navigate to="/dashboard/visitors" replace />} />
-        <Route path="/dashboard/guard-map" element={<GuardMapPage />} />
-        <Route path="/dashboard/announcements" element={<AnnouncementsList />} />
-        <Route path="/dashboard/announcements/:id" element={<AnnouncementDetail />} />
-        <Route path="/announcements/:id" element={<Navigate to="/dashboard/announcements/:id" replace />} />
-        <Route path="/dashboard/settings" element={<Settings />} />
-        <Route path="/dashboard/settings/sessions" element={<ActiveSessions />} />
-        <Route path="/dashboard/profile" element={<ProfilePage />} />
-        <Route path="/dashboard/projects" element={<AdminProjects />} />
+        <Route path="/dashboard/guard-map" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <GuardMapPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/announcements" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <AnnouncementsList />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/announcements/:id" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <AnnouncementDetail />
+          </ProtectedRoute>
+        } />
+        <Route path="/announcements/:id" element={
+          <Navigate to="/dashboard/announcements/:id" replace />
+        } />
+        <Route path="/dashboard/settings" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <Settings />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/settings/sessions" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <ActiveSessions />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/profile" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <ProfilePage />
+          </ProtectedRoute>
+        } />
+        <Route path="/dashboard/projects" element={
+          <ProtectedRoute allowedRoles={['resident']}>
+            <AdminProjects />
+          </ProtectedRoute>
+        } />
 
         {/* GUARD DASHBOARD */}
-        <Route path="/guard/dashboard" element={<GuardDashboard />} />
+        <Route path="/guard/dashboard" element={
+          <ProtectedRoute allowedRoles={['guard']}>
+            <GuardDashboard />
+          </ProtectedRoute>
+        } />
 
         {/* ADMIN ROUTES */}
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/subscriptions" element={<AdminSubscriptions />} />
-        <Route path="/admin/capex" element={<AdminCapEx />} />
-        <Route path="/admin/residents" element={<AdminResidents />} />
-        <Route path="/admin/projects" element={<AdminProjects />} />
-        <Route path="/admin/payments/verify" element={<AdminPaymentVerification />} />
+        <Route path="/admin/dashboard" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/subscriptions" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminSubscriptions />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/capex" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminCapEx />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/residents" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminResidents />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/projects" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminProjects />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/payments/verify" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminPaymentVerification />
+          </ProtectedRoute>
+        } />
 
         {/* CATCH-ALL */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )

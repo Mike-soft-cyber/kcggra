@@ -20,7 +20,7 @@ exports.createIncidents = async(req, res) => {
             user: reporter_id,
             type,
             description,
-            location: { type: 'Point'},
+            location: {  type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)]},
             coordinates: [parseFloat(longitude) || 36.8219, parseFloat(latitude) || -1.2921],
             address: address || 'Location not specified',
             media: mediaUrls,

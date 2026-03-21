@@ -5,4 +5,4 @@ const topicSchema = new mongoose.Schema({
     details: { type: String}
 })
 
-module.exports('Topic', topicSchema)
+module.exports = mongoose.model('Topic', topicSchema)

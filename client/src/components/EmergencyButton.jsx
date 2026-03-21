@@ -28,11 +28,11 @@ export default function EmergencyButton() {
       description: 'Fire emergency'
     },
     { 
-      type: 'medical', 
-      label: 'Medical', 
+      type: 'environmental', 
+      label: 'Environment', 
       icon: '🏥', 
       color: 'bg-blue-600',
-      description: 'Medical emergency'
+      description: 'Environmental Activity'
     },
     { 
       type: 'suspicious', // ✅ Changed from 'suspicious_activity' to match backend

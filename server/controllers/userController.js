@@ -133,6 +133,7 @@ exports.verifyOTP = async(req, res) => {
       success: true,
       message: 'Login successful',
       user: userResponse,
+      token
     });
   } catch (error) {
     console.error('❌ Verify OTP error:', error);
