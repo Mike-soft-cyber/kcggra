@@ -26,7 +26,12 @@ const server = http.createServer(app);
 // Initialize Socket.io
 const io = socketIo(server, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:5173'], // Added 5173
+    origin: [
+      'http://localhost:3000', 
+      'http://localhost:5173',
+      'https://kcggra-production.up.railway.app',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -36,7 +41,12 @@ const io = socketIo(server, {
 connectDB();
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'], // Added 5173
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:5173',
+    'https://kcggra-production.up.railway.app',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean),
   credentials: true,
 }));
 
