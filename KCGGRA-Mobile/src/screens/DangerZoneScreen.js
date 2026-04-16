@@ -1,108 +1,93 @@
 import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft, AlertOctagon, UserX, Trash2 } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
+import { useNavigation } from '@react-navigation/native';
 import api from '../services/api';
+import { colors } from '../themes/colors';
+import { cardStyle } from '../components/Card';
+import IconBox from '../components/IconBox';
+import FadeInView from '../components/FadeInView';
+import { toast } from '../utils/toast';
 
 export default function DangerZoneScreen() {
   const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      '⚠️ Delete Account',
-      'This action is permanent and cannot be undone. All your data will be deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true)
-              await api.deleteAccount()
-              await SecureStore.deleteItemAsync('token')
-              navigation.reset({ index: 0, routes: [{ name: 'Login' }] })
-            } catch (error) {
-              Alert.alert('Failed', error.message || 'Failed to delete account')
-            } finally {
-              setLoading(false)
-            }
-          }
+    Alert.alert('⚠️ Delete Account', 'This is permanent and cannot be undone. All your data will be deleted.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete Account', style: 'destructive', onPress: async () => {
+        try {
+          setLoading(true)
+          await api.deleteAccount()
+          await SecureStore.deleteItemAsync('token')
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] })
+        } catch (error) {
+          toast.error('Failed', error.message || 'Failed to delete account')
+        } finally {
+          setLoading(false)
         }
-      ]
-    )
-  }
-
-  const handleDeactivate = () => {
-    Alert.alert(
-      'Deactivate Account',
-      'Your account will be temporarily disabled. You can reactivate by contacting admin.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Deactivate',
-          style: 'destructive',
-          onPress: () => Alert.alert('Contact Admin', 'Please contact your admin to deactivate your account.')
-        }
-      ]
-    )
+      }}
+    ])
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <View style={{ backgroundColor: '#dc2626' }} className="px-6 pt-14 pb-6">
-        <Pressable onPress={() => navigation.goBack()} className="mb-4">
-          <Text className="text-red-200 font-medium">← Back</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ backgroundColor: colors.rose, paddingTop: insets.top + 16, paddingBottom: 24, paddingHorizontal: 24 }}>
+        <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <ArrowLeft color="rgba(255,255,255,0.7)" size={20} />
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Back</Text>
         </Pressable>
-        <Text className="text-white text-2xl font-bold">Danger Zone</Text>
-        <Text className="text-red-200 text-sm mt-1">Irreversible account actions</Text>
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>Danger Zone</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 }}>Irreversible account actions</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-
-        <View className="bg-red-50 rounded-2xl p-4 flex-row gap-3"
-          style={{ borderWidth: 1, borderColor: '#fecaca' }}>
-          <Text style={{ fontSize: 16 }}>⚠️</Text>
-          <Text className="text-red-700 text-sm flex-1">
-            Actions in this section are permanent and cannot be undone. Please proceed with caution.
-          </Text>
-        </View>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: insets.bottom + 24 }}>
+        {/* Warning */}
+        <FadeInView delay={0}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: `${colors.rose}10`, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: `${colors.rose}30` }}>
+            <AlertOctagon color={colors.rose} size={20} />
+            <Text style={{ color: colors.rose, fontSize: 13, flex: 1, lineHeight: 20 }}>Actions in this section are permanent and cannot be undone. Please proceed with extreme caution.</Text>
+          </View>
+        </FadeInView>
 
         {/* Deactivate */}
-        <View className="bg-white rounded-2xl p-5"
-          style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}>
-          <Text className="text-base font-bold text-gray-900 mb-1">Deactivate Account</Text>
-          <Text className="text-gray-500 text-sm mb-4">
-            Temporarily disable your account. You can reactivate by contacting admin.
-          </Text>
-          <Pressable
-            onPress={handleDeactivate}
-            className="border border-orange-300 rounded-xl py-3 items-center"
-          >
-            <Text className="text-orange-600 font-semibold">Deactivate Account</Text>
-          </Pressable>
-        </View>
+        <FadeInView delay={50}>
+          <View style={cardStyle}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <IconBox icon={<UserX color="#E97C3A" size={18} />} color="#E97C3A" />
+              <Text style={{ color: colors.heading, fontWeight: '700', fontSize: 16 }}>Deactivate Account</Text>
+            </View>
+            <Text style={{ color: colors.body, fontSize: 13, lineHeight: 20, marginBottom: 14 }}>Temporarily disable your account. You can reactivate by contacting admin.</Text>
+            <Pressable
+              onPress={() => Alert.alert('Contact Admin', 'Please contact your admin to deactivate your account.')}
+              style={{ borderWidth: 1.5, borderColor: '#E97C3A', borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Text style={{ color: '#E97C3A', fontWeight: '700', fontSize: 15 }}>Deactivate Account</Text>
+            </Pressable>
+          </View>
+        </FadeInView>
 
         {/* Delete */}
-        <View className="bg-white rounded-2xl p-5"
-          style={{ borderWidth: 0.5, borderColor: '#fecaca' }}>
-          <Text className="text-base font-bold text-red-600 mb-1">Delete Account</Text>
-          <Text className="text-gray-500 text-sm mb-4">
-            Permanently delete your account and all associated data. This cannot be undone.
-          </Text>
-          <Pressable
-            onPress={handleDeleteAccount}
-            disabled={loading}
-            className="bg-red-600 rounded-xl py-3 items-center"
-            style={{ opacity: loading ? 0.7 : 1 }}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : (
-              <Text className="text-white font-bold">Delete My Account</Text>
-            )}
-          </Pressable>
-        </View>
-
+        <FadeInView delay={100}>
+          <View style={[cardStyle, { borderWidth: 1, borderColor: `${colors.rose}30` }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <IconBox icon={<Trash2 color={colors.rose} size={18} />} color={colors.rose} />
+              <Text style={{ color: colors.rose, fontWeight: '700', fontSize: 16 }}>Delete Account</Text>
+            </View>
+            <Text style={{ color: colors.body, fontSize: 13, lineHeight: 20, marginBottom: 14 }}>Permanently delete your account and all associated data. This cannot be undone.</Text>
+            <Pressable
+              onPress={handleDeleteAccount}
+              disabled={loading}
+              style={{ backgroundColor: colors.rose, borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Delete My Account</Text>}
+            </Pressable>
+          </View>
+        </FadeInView>
       </ScrollView>
     </View>
   )

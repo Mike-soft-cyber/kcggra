@@ -1,182 +1,157 @@
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import FadeInView from '../components/FadeInView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import { ArrowLeft, AlertTriangle, Flame, Eye, Wind, MapPin } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import api from '../services/api';
+import { colors } from '../themes/colors';
+import { cardStyle } from '../components/Card';
+import IconBox from '../components/IconBox';
+import { toast } from '../utils/toast';
 
 const INCIDENT_TYPES = [
-  { key: 'burglary',      label: 'Burglary',       icon: '🔓' },
-  { key: 'fire',          label: 'Fire',            icon: '🔥' },
-  { key: 'environmental', label: 'Environmental',   icon: '⚠️' },
-  { key: 'suspicious',    label: 'Suspicious',      icon: '👁️' },
+  { key: 'burglary', label: 'Burglary', desc: 'Break-in or theft', icon: AlertTriangle, color: colors.rose },
+  { key: 'fire', label: 'Fire', desc: 'Fire or smoke', icon: Flame, color: '#E97C3A' },
+  { key: 'environmental', label: 'Environmental', desc: 'Flood or gas leak', icon: Wind, color: '#4A7C6F' },
+  { key: 'suspicious', label: 'Suspicious', desc: 'Suspicious activity', icon: Eye, color: colors.purple },
 ]
 
 export default function ReportIncidentScreen() {
   const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    type: '',
-    title: '',
-    description: '',
-    address: '',
-  })
+  const [titleFocused, setTitleFocused] = useState(false)
+  const [descFocused, setDescFocused] = useState(false)
+  const [addressFocused, setAddressFocused] = useState(false)
+  const [formData, setFormData] = useState({ type: '', title: '', description: '', address: '' })
 
   const handleSubmit = async () => {
     if (!formData.type || !formData.title || !formData.description) {
-      Alert.alert('Missing fields', 'Please fill in all required fields')
-      return
+      toast.error('Missing fields', 'Please fill in all required fields'); return;
     }
-
     try {
       setLoading(true)
-
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
       const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location access is needed to report an incident')
-        return
-      }
-
+      if (status !== 'granted') { Alert.alert('Permission denied', 'Location access is needed'); return; }
       const location = await Location.getCurrentPositionAsync({})
       const { latitude, longitude } = location.coords
-
-      await api.createIncident({
-        type: formData.type,
-        title: formData.title,
-        description: formData.description,
-        address: formData.address,
-        latitude,
-        longitude,
-      })
-
-      Alert.alert('✅ Incident Reported', 'Your report has been submitted successfully.')
+      await api.createIncident({ ...formData, latitude, longitude })
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      toast.success('Reported', 'Your incident has been submitted.')
       navigation.goBack()
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to submit report')
+      console.error('Failed to submit', error)
+      toast.error('Error', error.message || 'Failed to submit')
     } finally {
       setLoading(false)
     }
   }
 
+  const inputStyle = (focused) => ({
+    backgroundColor: colors.background, borderRadius: 14,
+    borderWidth: focused ? 1.5 : 1,
+    borderColor: focused ? colors.purple : colors.border,
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 15, color: colors.heading,
+  })
+
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white px-6 pt-12 pb-6 border-b border-gray-100">
-        <Pressable onPress={() => navigation.goBack()} className="mb-4">
-          <Text className="text-green-600 font-medium">← Back</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ backgroundColor: colors.heading, paddingTop: insets.top + 16, paddingBottom: 24, paddingHorizontal: 24 }}>
+        <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <ArrowLeft color={colors.muted} size={20} />
+          <Text style={{ color: colors.muted, fontSize: 14 }}>Back</Text>
         </Pressable>
-        <Text className="text-2xl font-bold text-gray-900">Report Incident</Text>
-        <Text className="text-gray-500 text-sm mt-1">
-          Provide details about what happened
-        </Text>
+        <Text style={{ color: colors.gold, fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>Report Incident</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>Provide details about what happened</Text>
       </View>
 
-      <View className="p-6 gap-5">
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
 
-        {/* Incident Type */}
-        <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-3">
-            Incident Type <Text className="text-red-500">*</Text>
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            {INCIDENT_TYPES.map((t) => {
-              const selected = formData.type === t.key
-              return (
-                <Pressable
-                  key={t.key}
-                  onPress={() => setFormData({ ...formData, type: t.key })}
-                  className="flex-row items-center gap-2 px-4 py-2.5 rounded-xl"
-                  style={{
-                    borderWidth: 1.5,
-                    borderColor: selected ? '#16a34a' : '#e5e7eb',
-                    backgroundColor: selected ? '#f0fdf4' : '#fff',
-                  }}
-                >
-                  <Text style={{ fontSize: 16 }}>{t.icon}</Text>
-                  <Text style={{ color: selected ? '#16a34a' : '#6b7280' }}
-                    className="text-sm font-medium">
-                    {t.label}
-                  </Text>
-                </Pressable>
-              )
-            })}
+        {/* Type Selection */}
+        <FadeInView delay={0}>
+          <View style={cardStyle}>
+            <Text style={{ color: colors.heading, fontWeight: '700', fontSize: 15, marginBottom: 14 }}>
+              Incident Type <Text style={{ color: colors.rose }}>*</Text>
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              {INCIDENT_TYPES.map((type) => {
+                const Icon = type.icon;
+                const selected = formData.type === type.key;
+                return (
+                  <Pressable
+                    key={type.key}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFormData({ ...formData, type: type.key }); }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 10,
+                      paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14,
+                      borderWidth: 1.5,
+                      borderColor: selected ? type.color : colors.border,
+                      backgroundColor: selected ? `${type.color}15` : colors.background,
+                      minWidth: '45%',
+                    }}
+                  >
+                    <IconBox icon={<Icon color={selected ? type.color : colors.muted} size={16} />} color={selected ? type.color : colors.muted} size={32} />
+                    <View>
+                      <Text style={{ color: selected ? type.color : colors.heading, fontWeight: '700', fontSize: 13 }}>{type.label}</Text>
+                      <Text style={{ color: colors.muted, fontSize: 11 }}>{type.desc}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        </FadeInView>
 
-        {/* Title */}
-        <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">
-            Title <Text className="text-red-500">*</Text>
-          </Text>
-          <TextInput
-            value={formData.title}
-            onChangeText={(v) => setFormData({ ...formData, title: v })}
-            placeholder="Brief title of the incident"
-            placeholderTextColor="#9ca3af"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-base"
-            style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}
-          />
-        </View>
+        {/* Form */}
+        <FadeInView delay={50}>
+          <View style={[cardStyle, { gap: 14 }]}>
+            <View>
+              <Text style={{ color: colors.heading, fontWeight: '600', fontSize: 14, marginBottom: 8 }}>Title <Text style={{ color: colors.rose }}>*</Text></Text>
+              <TextInput value={formData.title} onChangeText={(v) => setFormData({ ...formData, title: v })} placeholder="Brief title of the incident" placeholderTextColor={colors.muted} style={inputStyle(titleFocused)} onFocus={() => setTitleFocused(true)} onBlur={() => setTitleFocused(false)} />
+            </View>
+            <View>
+              <Text style={{ color: colors.heading, fontWeight: '600', fontSize: 14, marginBottom: 8 }}>Description <Text style={{ color: colors.rose }}>*</Text></Text>
+              <TextInput value={formData.description} onChangeText={(v) => setFormData({ ...formData, description: v })} placeholder="Describe what happened in detail..." placeholderTextColor={colors.muted} multiline numberOfLines={4} textAlignVertical="top" style={[inputStyle(descFocused), { minHeight: 120 }]} onFocus={() => setDescFocused(true)} onBlur={() => setDescFocused(false)} />
+            </View>
+            <View>
+              <Text style={{ color: colors.heading, fontWeight: '600', fontSize: 14, marginBottom: 8 }}>Address <Text style={{ color: colors.muted, fontWeight: '400' }}>(optional)</Text></Text>
+              <TextInput value={formData.address} onChangeText={(v) => setFormData({ ...formData, address: v })} placeholder="e.g. Near the main gate" placeholderTextColor={colors.muted} style={inputStyle(addressFocused)} onFocus={() => setAddressFocused(true)} onBlur={() => setAddressFocused(false)} />
+            </View>
+          </View>
+        </FadeInView>
 
-        {/* Description */}
-        <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">
-            Description <Text className="text-red-500">*</Text>
-          </Text>
-          <TextInput
-            value={formData.description}
-            onChangeText={(v) => setFormData({ ...formData, description: v })}
-            placeholder="Describe what happened in detail..."
-            placeholderTextColor="#9ca3af"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-base"
-            style={{ borderWidth: 0.5, borderColor: '#e5e7eb', minHeight: 120 }}
-          />
-        </View>
-
-        {/* Address */}
-        <View>
-          <Text className="text-sm font-semibold text-gray-700 mb-2">
-            Address <Text className="text-gray-400 font-normal">(optional)</Text>
-          </Text>
-          <TextInput
-            value={formData.address}
-            onChangeText={(v) => setFormData({ ...formData, address: v })}
-            placeholder="e.g. Near the main gate"
-            placeholderTextColor="#9ca3af"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-base"
-            style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}
-          />
-        </View>
-
-        {/* GPS note */}
-        <View className="flex-row items-center bg-blue-50 rounded-xl px-4 py-3 gap-2"
-          style={{ borderWidth: 0.5, borderColor: '#bfdbfe' }}>
-          <Text style={{ fontSize: 14 }}>📍</Text>
-          <Text className="text-blue-700 text-xs flex-1">
-            Your GPS location will be automatically attached when you submit
-          </Text>
-        </View>
+        {/* GPS Note */}
+        <FadeInView delay={50}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: `${colors.purple}10`, borderRadius: 14, padding: 14 }}>
+            <MapPin color={colors.purple} size={18} />
+            <Text style={{ color: colors.purple, fontSize: 13, flex: 1, fontWeight: '500' }}>Your GPS location will be automatically attached</Text>
+          </View>
+        </FadeInView>
 
         {/* Submit */}
-        <Pressable
-          onPress={handleSubmit}
-          disabled={loading}
-          className="bg-green-600 rounded-2xl py-4 items-center mt-2"
-          style={{ opacity: loading ? 0.7 : 1 }}
-        >
-          {loading ? (
-            <View className="flex-row items-center gap-2">
-              <ActivityIndicator color="#fff" size="small" />
-              <Text className="text-white font-bold text-base ml-2">Submitting...</Text>
-            </View>
-          ) : (
-            <Text className="text-white font-bold text-base">Submit Report</Text>
-          )}
-        </Pressable>
+        <FadeInView delay={50}>
+          <Pressable
+            onPress={handleSubmit}
+            disabled={loading}
+            style={{ backgroundColor: colors.heading, borderRadius: 16, paddingVertical: 16, alignItems: 'center', opacity: loading ? 0.7 : 1 }}
+          >
+            {loading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator color={colors.gold} size="small" />
+                <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 15, marginLeft: 8 }}>Submitting...</Text>
+              </View>
+            ) : (
+              <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 15 }}>Submit Report</Text>
+            )}
+          </Pressable>
+        </FadeInView>
 
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }

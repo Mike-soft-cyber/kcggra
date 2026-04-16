@@ -31,6 +31,10 @@ import AdminSubscriptions from './pages/AdminSubscriptions'
 import AdminCapEx from './pages/AdminCapEx'
 import AdminResidents from './pages/AdminResidents'
 import AdminPaymentVerification from './pages/AdminPaymentVerification'
+import AdminSecretLogin from './pages/AdminSecretLogin';
+
+const ADMIN_SLUG = import.meta.env.VITE_ADMIN_SLUG || 'change-this-in-env';
+
 
 export default function App() {
   return (
@@ -156,6 +160,11 @@ export default function App() {
             <AdminPaymentVerification />
           </ProtectedRoute>
         } />
+
+         <Route
+          path={`/portal/${ADMIN_SLUG}`}
+          element={<AdminSecretLogin />}
+        />
 
         {/* CATCH-ALL */}
         <Route path="*" element={<Navigate to="/login" replace />} />

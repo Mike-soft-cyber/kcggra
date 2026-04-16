@@ -1,213 +1,254 @@
 import { API_URL } from '../config/config';
-import axios from 'axios' 
+import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { navigationRef } from '../navigation/navigationRef';
 
 const API = axios.create({
-  baseURL: `${API_URL}`
-})
+  baseURL: API_URL,
+  withCredentials: true,
+  timeout: 15000,
+});
+
+let isRedirectingToLogin = false;
+
+const handleAuthFailure = async () => {
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  try { await SecureStore.deleteItemAsync('token'); } catch {}
+  if (navigationRef.isReady()) {
+    navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+  }
+  setTimeout(() => { isRedirectingToLogin = false; }, 3000);
+};
 
 API.interceptors.request.use(async (config) => {
-    const token = await SecureStore.getItemAsync('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-})
+  const token = await SecureStore.getItemAsync('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 API.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if(error.response?.status === 401){
-          navigationRef.navigate('Login')
-        }
-        return Promise.reject(error)
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+ 
+    if (status === 401) {
+      // Token expired or invalid — redirect to login
+      console.warn('🔒 Session expired — redirecting to login');
+      window.location.href = '/login';
     }
-)
+ 
+    // Log every error for debugging
+    console.error(
+      '❌ API Error:',
+      error.config?.url,
+      status,
+      error.response?.data?.message || error.message
+    );
+ 
+    return Promise.reject(error);
+  }
+);
 
 const api = {
-  // Request OTP
+  // ── Auth ──────────────────────────────────────────────
   requestOTP: async (phone) => {
-    const response = await API.post(`/auth/request-otp`, { phone });
-    return response.data;
-},
+    const res = await API.post('/auth/request-otp', { phone });
+    return res.data;
+  },
 
-  // Verify OTP
   verifyOTP: async (phone, otp) => {
-    const response = await API.post(`/auth/verify-otp`, {phone, otp});
-    return response.data
+    const res = await API.post('/auth/verify-otp', { phone, otp });
+    return res.data;
   },
 
-  completeProfile: async(data) => {
-    const response = await API.patch(`/auth/update-profile`, data)
-    return response.data;
+  completeProfile: async (data) => {
+    // ✅ Never sends role — backend ignores it anyway
+    const { username, email, street } = data;
+    const res = await API.patch('/auth/update-profile', { username, email, street });
+    return res.data;
   },
 
-  sendAlertIncident: async(type, latitude, longitude, address) => {
-    const response = await API.post(`/incidents`, { type, latitude, longitude, address })
-    return response.data;
+  updateProfile: async (data) => {
+    const { username, email, street } = data; // ✅ role stripped
+    const res = await API.patch('/auth/update-profile', { username, email, street });
+    return res.data;
   },
 
-  getAnnouncements: async() => {
-    const response = await API.get('/announcements')
-    return response.data
+  getMe: async () => {
+    const res = await API.get('/auth/me');
+    return res.data;
   },
 
-  getProjects: async() => {
-    const response = await API.get('/projects')
-    return response.data
+  /**
+   * Admin-only login — called from the hidden modal (7 logo taps + PIN)
+   * Uses email + password, NOT OTP
+   * Hits a separate endpoint from the resident login
+   */
+  adminLogin: async (email, password) => {
+    const res = await API.post('/auth/admin-login', { email, password });
+    return res.data;
   },
 
-  getIncidents: async() => {
-    const response = await API.get('/incidents')
-    return response.data
+  // ── Incidents ─────────────────────────────────────────
+  sendAlertIncident: async (type, latitude, longitude, address) => {
+    const res = await API.post('/incidents', { type, latitude, longitude, address });
+    return res.data;
   },
 
-  createIncident: async(data) => {
-    const response = await API.post('/incidents', data)
-    return response.data
-},
+  getIncidents: async () => {
+    const res = await API.get('/incidents');
+    return res.data;
+  },
 
+  createIncident: async (data) => {
+    const res = await API.post('/incidents', data);
+    return res.data;
+  },
+
+  updateIncidentStatus: async (incidentId, status, notes) => {
+    const res = await API.patch(`/incidents/${incidentId}/status`, { status, notes });
+    return res.data;
+  },
+
+  // ── Announcements ─────────────────────────────────────
+  getAnnouncements: async () => {
+    const res = await API.get('/announcements');
+    return res.data;
+  },
+
+  // ── Projects ──────────────────────────────────────────
+  getProjects: async () => {
+    const res = await API.get('/projects');
+    return res.data;
+  },
+
+  // ── Payments ──────────────────────────────────────────
   getMyPayments: async () => {
-    const response = await API.get('/payments/my-payments')
-    return response.data
-},
+    const res = await API.get('/payments/my-payments');
+    return res.data;
+  },
 
-initiateMpesa: async (amount, phone, payment_type) => {
-    const response = await API.post('/payments/mpesa/initiate', { amount, phone, payment_type })
-    return response.data
-},
+  initiateMpesa: async (amount, phone, payment_type) => {
+    const res = await API.post('/payments/mpesa/initiate', { amount, phone, payment_type });
+    return res.data;
+  },
 
-createBankPayment: async (formData) => {
-    const response = await API.post('/payments/bank', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    })
-    return response.data
-},
+  createBankPayment: async (formData) => {
+    const res = await API.post('/payments/bank', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
 
-getGroups: async () => {
-    const response = await API.get('/groups')
-    return response.data
-},
+  // ── Community ─────────────────────────────────────────
+  getGroups: async () => {
+    const res = await API.get('/groups');
+    return res.data;
+  },
 
-getUpcomingEvents: async () => {
-    const response = await API.get('/events')
-    return response.data
-},
+  getUpcomingEvents: async () => {
+    const res = await API.get('/events');
+    return res.data;
+  },
 
-getDiscussions: async () => {
-    const response = await API.get('/discussions')
-    return response.data
-},
+  getDiscussions: async () => {
+    const res = await API.get('/discussions');
+    return res.data;
+  },
 
-createDiscussion: async (data) => {
-    const response = await API.post('/discussions', data)
-    return response.data
-},
+  createDiscussion: async (data) => {
+    const res = await API.post('/discussions', data);
+    return res.data;
+  },
 
-createEvent: async (data) => {
-    const response = await API.post('/events', data)
-    return response.data
-},
+  createEvent: async (data) => {
+    const res = await API.post('/events', data);
+    return res.data;
+  },
 
-updateProfile: async (data) => {
-    const response = await API.patch('/auth/update-profile', data)
-    return response.data
-},
+  // ── User Settings ─────────────────────────────────────
+  changePassword: async (data) => {
+    const res = await API.post('/user/change-password', data);
+    return res.data;
+  },
 
-getMe: async () => {
-    const response = await API.get('/auth/me')
-    return response.data
-},
+  getSessions: async () => {
+    const res = await API.get('/user/sessions');
+    return res.data;
+  },
 
-changePassword: async (data) => {
-    const response = await API.post('/user/change-password', data)
-    return response.data
-},
+  signOutAll: async () => {
+    const res = await API.post('/user/signout-all');
+    return res.data;
+  },
 
-getSessions: async () => {
-    const response = await API.get('/user/sessions')
-    return response.data
-},
+  addProxyAccount: async (data) => {
+    const res = await API.post('/user/proxy', data);
+    return res.data;
+  },
 
-signOutAll: async () => {
-    const response = await API.post('/user/signout-all')
-    return response.data
-},
+  deleteAccount: async () => {
+    const res = await API.delete('/user/account');
+    return res.data;
+  },
 
-addProxyAccount: async (data) => {
-    const response = await API.post('/user/proxy', data)
-    return response.data
-},
+  // ── Guards ────────────────────────────────────────────
+  getActiveGuardLocations: async () => {
+    const res = await API.get('/guards/active-locations');
+    return res.data;
+  },
 
-deleteAccount: async () => {
-    const response = await API.delete('/user/account')
-    return response.data
-},
+  startShift: async () => {
+    const res = await API.post('/guards/start-shift');
+    return res.data;
+  },
 
-getActiveGuardLocations: async () => {
-    const response = await API.get('/guards/active-locations')
-    return response.data
-},
+  endShift: async () => {
+    const res = await API.post('/guards/end-shift');
+    return res.data;
+  },
 
-// Guard APIs
-startShift: async () => {
-    const response = await API.post('/guards/start-shift')
-    return response.data
-},
+  getCurrentShift: async () => {
+    const res = await API.get('/guards/current-shift');
+    return res.data;
+  },
 
-endShift: async () => {
-    const response = await API.post('/guards/end-shift')
-    return response.data
-},
+  updateGuardLocation: async (latitude, longitude, status) => {
+    const res = await API.post('/guards/update-location', { latitude, longitude, status });
+    return res.data;
+  },
 
-getCurrentShift: async () => {
-    const response = await API.get('/guards/current-shift')
-    return response.data
-},
+  getGuardStats: async () => {
+    const res = await API.get('/guards/stats');
+    return res.data;
+  },
 
-updateGuardLocation: async (latitude, longitude, status) => {
-    const response = await API.post('/guards/update-location', { latitude, longitude, status })
-    return response.data
-},
+  getOnDutyGuards: async () => {
+    const res = await API.get('/guards/on-duty');
+    return res.data;
+  },
 
-getGuardStats: async () => {
-    const response = await API.get('/guards/stats')
-    return response.data
-},
+  // ── Visitors ──────────────────────────────────────────
+  verifyVisitor: async (visitorId) => {
+    const res = await API.post(`/visitors/${visitorId}/verify`);
+    return res.data;
+  },
 
-getOnDutyGuards: async () => {
-    const response = await API.get('/guards/on-duty')
-    return response.data
-},
+  checkoutVisitor: async (visitorId) => {
+    const res = await API.post(`/visitors/${visitorId}/checkout`);
+    return res.data;
+  },
 
-verifyVisitor: async (visitorId) => {
-    const response = await API.post(`/visitors/${visitorId}/verify`)
-    return response.data
-},
+  getActiveVisitors: async () => {
+    const res = await API.get('/visitors/active');
+    return res.data;
+  },
 
-checkoutVisitor: async (visitorId) => {
-    const response = await API.post(`/visitors/${visitorId}/checkout`)
-    return response.data
-},
-
-getActiveVisitors: async () => {
-    const response = await API.get('/visitors/active')
-    return response.data
-},
-
-updateIncidentStatus: async (incidentId, status, notes) => {
-    const response = await API.patch(`/incidents/${incidentId}/status`, { status, notes })
-    return response.data
-},
-
-getVisitor: async (visitorId) => {
-    const response = await API.get(`/visitors/${visitorId}`)
-    return response.data
-},
-  
+  getVisitor: async (visitorId) => {
+    const res = await API.get(`/visitors/${visitorId}`);
+    return res.data;
+  },
 };
 
 export default api;

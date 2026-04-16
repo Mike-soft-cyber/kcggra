@@ -1,31 +1,30 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import FadeInView from '../components/FadeInView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { ArrowLeft, User, Mail, MapPin } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import api from '../services/api';
+import { colors } from '../themes/colors';
+import { cardStyle } from '../components/Card';
+import { toast } from '../utils/toast';
 
 export default function ProfileSettingsScreen() {
   const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    street: '',
-  })
+  const [focused, setFocused] = useState({})
+  const [formData, setFormData] = useState({ username: '', email: '', street: '', phone: '' })
 
   useEffect(() => { fetchMe() }, [])
 
   const fetchMe = async () => {
     try {
-      setLoading(true)
       const res = await api.getMe()
       const user = res.user || res
-      setFormData({
-        username: user.username || '',
-        email: user.email || '',
-        street: user.street || '',
-        phone: user.phone || '',
-})
+      setFormData({ username: user.username || '', email: user.email || '', street: user.street || '', phone: user.phone || '' })
     } catch (error) {
       console.error('Failed to fetch profile:', error.message)
     } finally {
@@ -34,112 +33,112 @@ export default function ProfileSettingsScreen() {
   }
 
   const handleSave = async () => {
-    if (!formData.username || !formData.street) {
-      Alert.alert('Missing fields', 'Name and street are required')
-      return
-    }
+    if (!formData.username || !formData.street) { Alert.alert('Missing fields', 'Name and street are required'); return; }
     try {
       setSaving(true)
-      await api.updateProfile(formData)
-      Alert.alert('✅ Saved', 'Your profile has been updated!')
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      await api.updateProfile({ username: formData.username, email: formData.email, street: formData.street })
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      toast.success('Saved', 'Your profile has been updated!')
       navigation.goBack()
     } catch (error) {
-      Alert.alert('Failed', error.message || 'Failed to update profile')
+      console.error('Failed to update profile', error)
+      toast.error('Failed', error.message || 'Failed to update profile')
     } finally {
       setSaving(false)
     }
   }
 
+  const inputStyle = (key) => ({
+    flex: 1, paddingHorizontal: 14, paddingVertical: 14,
+    fontSize: 15, color: colors.heading,
+  })
+
+  const fieldStyle = (key) => ({
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.background, borderRadius: 14,
+    borderWidth: focused[key] ? 1.5 : 1,
+    borderColor: focused[key] ? colors.purple : colors.border,
+    overflow: 'hidden',
+    shadowColor: focused[key] ? colors.purple : 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: focused[key] ? 0.15 : 0,
+    shadowRadius: focused[key] ? 6 : 0,
+  })
+
   if (loading) return (
-    <View className="flex-1 items-center justify-center bg-gray-50">
-      <ActivityIndicator size="large" color="#16a34a" />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+      <ActivityIndicator size="large" color={colors.purple} />
     </View>
   )
 
+  const fields = [
+    { key: 'username', label: 'Full Name', icon: User, placeholder: 'John Kamau', required: true },
+    { key: 'email', label: 'Email', icon: Mail, placeholder: 'john@example.com', required: false },
+    { key: 'street', label: 'Street Address', icon: MapPin, placeholder: 'House 15, Gituamba Lane', required: true },
+  ]
+
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View style={{ backgroundColor: '#16a34a' }} className="px-6 pt-14 pb-6">
-        <Pressable onPress={() => navigation.goBack()} className="mb-4">
-          <Text className="text-green-200 font-medium">← Back</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ backgroundColor: colors.heading, paddingTop: insets.top + 16, paddingBottom: 24, paddingHorizontal: 24 }}>
+        <Pressable onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <ArrowLeft color={colors.muted} size={20} />
+          <Text style={{ color: colors.muted, fontSize: 14 }}>Back</Text>
         </Pressable>
-        <Text className="text-white text-2xl font-bold">Profile Information</Text>
-        <Text className="text-green-200 text-sm mt-1">Update your personal details</Text>
+        <Text style={{ color: colors.gold, fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>Profile Information</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>Update your personal details</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        <View className="bg-white rounded-2xl p-5 gap-4"
-          style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: insets.bottom + 24 }}>
+        <FadeInView delay={50}>
+          <View style={[cardStyle, { gap: 16 }]}>
+            {fields.map(({ key, label, icon: Icon, placeholder, required }) => (
+              <View key={key}>
+                <Text style={{ color: colors.heading, fontWeight: '600', fontSize: 14, marginBottom: 8 }}>
+                  {label} {required && <Text style={{ color: colors.rose }}>*</Text>}
+                </Text>
+                <View style={fieldStyle(key)}>
+                  <View style={{ paddingLeft: 14 }}>
+                    <Icon color={focused[key] ? colors.purple : colors.muted} size={18} />
+                  </View>
+                  <TextInput
+                    value={formData[key]}
+                    onChangeText={(v) => setFormData({ ...formData, [key]: v })}
+                    placeholder={placeholder}
+                    placeholderTextColor={colors.muted}
+                    style={inputStyle(key)}
+                    onFocus={() => setFocused({ ...focused, [key]: true })}
+                    onBlur={() => setFocused({ ...focused, [key]: false })}
+                    keyboardType={key === 'email' ? 'email-address' : 'default'}
+                    autoCapitalize={key === 'email' ? 'none' : 'words'}
+                  />
+                </View>
+              </View>
+            ))}
 
-          {/* Full Name */}
-          <View>
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Full Name</Text>
-            <TextInput
-              value={formData.username}
-              onChangeText={(v) => setFormData({ ...formData, username: v })}
-              placeholder="John Kamau"
-              placeholderTextColor="#9ca3af"
-              className="bg-gray-50 rounded-xl px-4 py-3 text-gray-900"
-              style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}
-            />
+            {/* Phone - read only */}
+            <View>
+              <Text style={{ color: colors.heading, fontWeight: '600', fontSize: 14, marginBottom: 8 }}>
+                Phone <Text style={{ color: colors.muted, fontWeight: '400' }}>(cannot be changed)</Text>
+              </Text>
+              <View style={{ backgroundColor: colors.background, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 14 }}>
+                <Text style={{ color: colors.muted, fontSize: 15 }}>{formData.phone || 'Not set'}</Text>
+              </View>
+            </View>
           </View>
+        </FadeInView>
 
-          {/* Email */}
-          <View>
-            <Text className="text-sm font-semibold text-gray-700 mb-2">
-              Email <Text className="text-gray-400 font-normal">(optional)</Text>
-            </Text>
-            <TextInput
-              value={formData.email}
-              onChangeText={(v) => setFormData({ ...formData, email: v })}
-              placeholder="john@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholderTextColor="#9ca3af"
-              className="bg-gray-50 rounded-xl px-4 py-3 text-gray-900"
-              style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}
-            />
-          </View>
-
-          {/* Street */}
-          <View>
-            <Text className="text-sm font-semibold text-gray-700 mb-2">Street Address</Text>
-            <TextInput
-              value={formData.street}
-              onChangeText={(v) => setFormData({ ...formData, street: v })}
-              placeholder="House 15, Gituamba Lane"
-              placeholderTextColor="#9ca3af"
-              className="bg-gray-50 rounded-xl px-4 py-3 text-gray-900"
-              style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}
-            />
-          </View>
-
-<View>
-  <Text className="text-sm font-semibold text-gray-700 mb-2">
-    Phone
-  </Text>
-  <View className="bg-gray-100 rounded-xl px-4 py-3"
-    style={{ borderWidth: 0.5, borderColor: '#e5e7eb' }}>
-    <Text className="text-gray-500">{formData.phone}</Text>
-  </View>
-</View>
-
-        </View>
-
-        {/* Save Button */}
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="bg-green-600 rounded-2xl py-4 items-center"
-          style={{ opacity: saving ? 0.7 : 1 }}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text className="text-white font-bold text-base">Save Changes</Text>
-          )}
-        </Pressable>
-
+        <FadeInView delay={100}>
+          <Pressable
+            onPress={handleSave}
+            disabled={saving}
+            style={{ backgroundColor: colors.heading, borderRadius: 16, paddingVertical: 16, alignItems: 'center', opacity: saving ? 0.7 : 1 }}
+          >
+            {saving ? <ActivityIndicator color={colors.gold} /> : (
+              <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 15 }}>Save Changes</Text>
+            )}
+          </Pressable>
+        </FadeInView>
       </ScrollView>
     </View>
   )

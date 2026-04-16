@@ -1,90 +1,132 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState, useRef } from 'react';
+import {
+  View, Text, TextInput, Pressable, ActivityIndicator,
+  KeyboardAvoidingView, Platform, Animated
+} from 'react-native';
+import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft } from 'lucide-react-native';
+import FadeInView from '../components/FadeInView';
 import api from '../services/api';
+import { colors } from '../themes/colors';
+import { toast } from '../utils/toast';
 
 export default function OTPScreen({ navigation, route }) {
-  const { phone } = route.params; // Get phone from previous screen
+  const { phone } = route.params;
   const [otp, setOTP] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const insets = useSafeAreaInsets();
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  };
 
   const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
-      Alert.alert('Error', 'Please enter a valid 6-digit OTP');
+      toast.error('Invalid OTP', 'Please enter a valid 6-digit OTP');
       return;
     }
-
     setLoading(true);
-
     try {
       const response = await api.verifyOTP(phone, otp);
-      console.log(response)
       await SecureStore.setItemAsync('token', response.token);
-      
-      // Check if new user (needs profile completion)
-      if (response.user.username.startsWith('User_')) { // ✅ Changed from response.data.user
-  navigation.navigate('ProfileCompletion'); // Temporary
-} else {
-  
-  // Check role and navigate accordingly
-  if (response.user.role === 'admin') { // ✅ Changed from response.data.user
-    navigation.navigate('Dashboard');
-  } else if (response.user.role === 'guard') { // ✅ Changed from response.data.user
-    navigation.navigate('GuardDashboard');
-  } else {
-    navigation.navigate('Dashboard');
-  }
-}
-      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      const role = response.user.role;
+      const isNewUser = response.user.username.startsWith('User_');
+
+      if (isNewUser) {
+        // New user — complete profile (name + street only, no role picker)
+        navigation.navigate('ProfileCompletion');
+      } else if (role === 'guard') {
+        // Guards come through OTP flow
+        navigation.reset({ index: 0, routes: [{ name: 'GuardTabs' }] });
+      } else {
+        // Residents — the only role reachable via OTP
+        // ✅ Admins never land here — they use the hidden login modal
+        navigation.reset({ index: 0, routes: [{ name: 'ResidentTabs' }] });
+      }
     } catch (error) {
-      console.error(error)
-      Alert.alert('Error', error.message || 'Invalid OTP');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.error('Failed', error.message || 'Invalid OTP');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 p-5 justify-center bg-white">
-      <Text className="text-2xl font-bold mb-2 text-center text-gray-900">
-        Verify OTP
-      </Text>
-      
-      <Text className="text-sm text-gray-600 text-center mb-8">
-        Enter the 6-digit code sent to {phone}
-      </Text>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <View style={{
+        flex: 1, backgroundColor: colors.background,
+        paddingTop: insets.top, paddingHorizontal: 24, justifyContent: 'center'
+      }}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 40 }}
+        >
+          <ArrowLeft color={colors.body} size={20} />
+          <Text style={{ color: colors.body, fontSize: 14 }}>Back</Text>
+        </Pressable>
 
-      {/* OTP Input */}
-      <TextInput
-        className="border border-gray-300 rounded-lg px-4 h-12 text-base text-center mb-5"
-        placeholder="000000"
-        value={otp}
-        onChangeText={setOTP}
-        keyboardType="number-pad"
-        maxLength={6}
-        editable={!loading}
-      />
+        <FadeInView delay={0}>
+          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.heading, letterSpacing: -0.3, marginBottom: 8 }}>
+            Verify OTP
+          </Text>
+          <Text style={{ fontSize: 14, color: colors.body, marginBottom: 40 }}>
+            Enter the 6-digit code sent to {phone}
+          </Text>
+        </FadeInView>
 
-      {/* Verify Button */}
-      <Pressable 
-        className={`p-4 rounded-lg items-center ${loading ? 'bg-green-400' : 'bg-green-600'}`}
-        onPress={handleVerifyOTP}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text className="text-white text-base font-bold">Verify OTP</Text>
-        )}
-      </Pressable>
+        <FadeInView delay={50}>
+          <TextInput
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 20,
+              borderWidth: focused ? 1.5 : 1,
+              borderColor: focused ? colors.purple : colors.border,
+              paddingHorizontal: 24, paddingVertical: 20,
+              fontSize: 32, color: colors.heading,
+              textAlign: 'center', letterSpacing: 12,
+              elevation: 2, marginBottom: 24,
+            }}
+            placeholder="• • • • • •"
+            placeholderTextColor={colors.muted}
+            value={otp}
+            onChangeText={setOTP}
+            keyboardType="number-pad"
+            maxLength={6}
+            editable={!loading}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+          />
+        </FadeInView>
 
-      {/* Back Button */}
-      <Pressable 
-        className="mt-4 p-2"
-        onPress={() => navigation.goBack()}
-      >
-        <Text className="text-green-600 text-center">← Back to Login</Text>
-      </Pressable>
-    </View>
+        <FadeInView delay={100}>
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <Pressable
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              onPress={handleVerifyOTP}
+              disabled={loading}
+              style={{
+                backgroundColor: colors.heading, borderRadius: 16,
+                paddingVertical: 18, alignItems: 'center',
+                opacity: loading ? 0.7 : 1,
+              }}
+            >
+              {loading
+                ? <ActivityIndicator color={colors.gold} />
+                : <Text style={{ color: colors.gold, fontWeight: '700', fontSize: 16 }}>Verify OTP</Text>}
+            </Pressable>
+          </Animated.View>
+        </FadeInView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }

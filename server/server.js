@@ -7,55 +7,68 @@ const socketIo = require('socket.io');
 const passport = require('passport');
 const cookieParser = require('cookie-parser');
 
-// Load environment variables
 dotenv.config();
 
-// Import database connection
 const connectDB = require('./config/db');
-
-// Initialize Passport
 require('./config/passport');
-
-// Import cron service
 const { startCronJobs } = require('./services/cronService');
 
-// Initialize Express app
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.io
+// ── Allowed frontend origins ──────────────────────────────
+// ⚠️  'https://kcggra-production.up.railway.app' was WRONG here —
+//     that is the BACKEND URL, not the frontend.
+//     Set FRONTEND_URL in Railway to your actual frontend URL, e.g.:
+//       http://localhost:5173          (local dev)
+//       https://kcggra.vercel.app      (production)
+//
+// You can add a second URL as FRONTEND_URL_2 if needed.
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_2,
+].filter(Boolean);
+
+console.log('✅ CORS allowed origins:', allowedOrigins);
+
+// ── Socket.io ─────────────────────────────────────────────
 const io = socketIo(server, {
   cors: {
-    origin: [
-      'http://localhost:3000', 
-      'http://localhost:5173',
-      'https://kcggra-production.up.railway.app',
-      process.env.FRONTEND_URL,
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error('Socket CORS blocked: ' + origin));
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
 });
 
-
 connectDB();
 
+// ── CORS middleware ───────────────────────────────────────
 app.use(cors({
-  origin: [
-    'http://localhost:3000', 
-    'http://localhost:5173',
-    'https://kcggra-production.up.railway.app',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, curl, Railway health checks)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Log so you can see exactly what origin is being blocked
+    console.warn('❌ CORS blocked request from origin:', origin);
+    console.warn('   Add it to FRONTEND_URL in Railway env vars');
+    callback(new Error('CORS policy: origin not allowed — ' + origin));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(passport.initialize());
 
+// ── Socket events ─────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`New client connected: ${socket.id}`);
 
@@ -81,44 +94,48 @@ io.on('connection', (socket) => {
 
 app.set('io', io);
 
-app.use('/auth', require('./routes/authRoutes'))
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/ussd', require('./routes/ussdRoutes'));
-app.use('/api/incidents', require('./routes/incidentRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/visitors', require('./routes/visitorRoutes'));
-app.use('/api/guards', require('./routes/guardRoutes'));
-app.use('/api/groups', require('./routes/groupRoutes'));
-app.use('/api/announcements', require('./routes/announcementRoutes'));
-app.use('/api/events', require('./routes/eventRoutes'));
-app.use('/api/user', require('./routes/userSettingsRoutes'));
-app.use('/api/projects', require('./routes/projectRoutes'));
-app.use('/api/discussions', require('./routes/discussionRoutes'));
-app.use('/api/admin', require('./routes/adminRoutes'));
+// ── Routes ────────────────────────────────────────────────
+app.use('/auth',                    require('./routes/authRoutes'));
+app.use('/api/auth',                require('./routes/authRoutes'));
+app.use('/api/ussd',                require('./routes/ussdRoutes'));
+app.use('/api/incidents',           require('./routes/incidentRoutes'));
+app.use('/api/payments',            require('./routes/paymentRoutes'));
+app.use('/api/visitors',            require('./routes/visitorRoutes'));
+app.use('/api/guards',              require('./routes/guardRoutes'));
+app.use('/api/groups',              require('./routes/groupRoutes'));
+app.use('/api/announcements',       require('./routes/announcementRoutes'));
+app.use('/api/events',              require('./routes/eventRoutes'));
+app.use('/api/user',                require('./routes/userSettingsRoutes'));
+app.use('/api/projects',            require('./routes/projectRoutes'));
+app.use('/api/discussions',         require('./routes/discussionRoutes'));
+app.use('/api/admin',               require('./routes/adminRoutes'));
 app.use('/api/admin/subscriptions', require('./routes/adminSubscriptionRoutes'));
 
+// ── Health check ──────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Start ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════════');
   console.log(`🚀 KCGGRA Portal Server Started`);
   console.log('═══════════════════════════════════════════');
-  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Server URL: http://localhost:${PORT}`);
-  console.log('📱 ✅ Server running on http://192.168.1.15:5000');
-  console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⏳ Connecting...'}`);
+  console.log(`📡 Environment:  ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Port:         ${PORT}`);
+  console.log(`🖥️  Frontend URL: ${process.env.FRONTEND_URL || '⚠️  NOT SET'}`);
+  console.log(`📊 Database:     ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⏳ Connecting...'}`);
   console.log('═══════════════════════════════════════════');
-  
-  // Start cron jobs (only in production)
+
   if (process.env.NODE_ENV === 'production') {
     console.log('⏰ Starting cron jobs...');
     startCronJobs();
     console.log('✅ Cron jobs started');
   } else {
     console.log('⏰ Cron jobs disabled in development mode');
-    console.log('💡 To test cron jobs, set NODE_ENV=production or call them manually');
   }
-  
 });
 
 module.exports = { app, server, io };
