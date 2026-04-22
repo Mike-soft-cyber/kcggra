@@ -2,55 +2,37 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '@/api';
 import { toast } from 'sonner';
-import { 
-  Users, 
-  Calendar, 
-  MessageSquare, 
-  MapPin, 
-  Plus,
-  ChevronRight,
+import {
+  Users, Calendar, MessageSquare, MapPin, Plus, ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import DashboardLayout from '@/components/DashboardLayout'
+import DashboardLayout from '@/components/DashboardLayout';
+import PageLoader from '@/components/PageLoader';
 
 export default function Community() {
-  const [groups, setGroups] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showEventModal, setShowEventModal] = useState(false);
-  const [eventData, setEventData] = useState({
-    title: '',
-    description: '',
-    date: '',
-    time: '',
-    location: '',
-    event_type: 'meeting',
-  });
-  const [showTopicModal, setShowTopicModal] = useState(false);
-  const [topicData, setTopicData] = useState({
-    title: '',
-    content: '',
-    category: 'general',
-  });
+  const [groups, setGroups]         = useState([]);
+  const [events, setEvents]         = useState([]);
   const [discussions, setDiscussions] = useState([]);
-  const navigate = useNavigate()
+  const [loading, setLoading]       = useState(true);
+  const [showEventModal, setShowEventModal]   = useState(false);
+  const [showTopicModal, setShowTopicModal]   = useState(false);
+  const [eventData, setEventData] = useState({
+    title: '', description: '', date: '', time: '', location: '', event_type: 'meeting',
+  });
+  const [topicData, setTopicData] = useState({
+    title: '', content: '', category: 'general',
+  });
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
@@ -58,11 +40,14 @@ export default function Community() {
         API.get('/groups?type=street'),
         API.get('/events'),
       ]);
-
       setGroups(groupsRes.data.groups || []);
       setEvents(eventsRes.data.events || []);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
+      try {
+        const discRes = await API.get('/discussions');
+        setDiscussions(discRes.data.discussions || []);
+      } catch {}
+    } catch (err) {
+      console.error('Failed to fetch community data:', err);
       toast.error('Failed to load community data');
     } finally {
       setLoading(false);
@@ -73,392 +58,255 @@ export default function Community() {
     e.preventDefault();
     try {
       await API.post('/events', eventData);
-      toast.success('Event created successfully!');
+      toast.success('Event created!');
       setShowEventModal(false);
-      setEventData({
-        title: '',
-        description: '',
-        date: '',
-        time: '',
-        location: '',
-        event_type: 'meeting',
-      });
+      setEventData({ title: '', description: '', date: '', time: '', location: '', event_type: 'meeting' });
       fetchData();
-    } catch (error) {
-      toast.error('Failed to create event');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create event');
     }
   };
 
-  useEffect(() => {
-  fetchDiscussions();
-}, []);
-
-const fetchDiscussions = async () => {
-  try {
-    const response = await API.get('/discussions');
-    setDiscussions(response.data.discussions || []);
-  } catch (error) {
-    console.error('Failed to fetch discussions:', error);
-  }
-};
-
-const handleCreateTopic = async () => {
-  try {
-    await API.post('/discussions', topicData);
-    toast.success('Discussion topic created!');
-    setShowTopicModal(false);
-    setTopicData({ title: '', content: '', category: 'general' });
-    fetchDiscussions();
-  } catch (error) {
-    toast.error('Failed to create topic');
-  }
-};
-
-  const handleJoinGroup = async (groupId) => {
+  const handleCreateTopic = async (e) => {
+    e.preventDefault();
     try {
-      await API.post(`/groups/${groupId}/join`);
-      toast.success('Joined group successfully!');
+      await API.post('/discussions', topicData);
+      toast.success('Topic posted!');
+      setShowTopicModal(false);
+      setTopicData({ title: '', content: '', category: 'general' });
       fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to join group');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to post topic');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading community...</p>
-        </div>
-      </div>
-    );
-  }
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  }) : '';
+
+  // ── Bouncing dots loader (matches system) ────────────
+  if (loading) return (
+    <DashboardLayout>
+      <PageLoader message="Loading community…" />
+    </DashboardLayout>
+  );
 
   return (
     <DashboardLayout>
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="space-y-8">
+
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Community</h1>
-              <p className="text-gray-600 mt-1">Connect with your neighbors and join local groups</p>
-            </div>
-            <div className="flex gap-3">
-              <Input
-                placeholder="Search community..."
-                className="w-64"
-              />
-              <Dialog open={showEventModal} onOpenChange={setShowEventModal}>
-                <DialogTrigger asChild>
-                  <Button className="bg-green-600 hover:bg-green-700">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Event
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Create New Event</DialogTitle>
-                    <DialogDescription>
-                      Organize a community gathering or meeting
-                    </DialogDescription>
-                  </DialogHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">Community</h1>
+            <p className="text-[#64748B] text-sm mt-1">Your streets, groups and events</p>
+          </div>
+          <div className="flex gap-3">
+            {/* Post topic */}
+            <Dialog open={showTopicModal} onOpenChange={setShowTopicModal}>
+              <DialogTrigger asChild>
+                <button className="
+                  relative px-4 py-2.5 z-10 rounded-xl
+                  bg-white border border-[#E2E8F0]
+                  text-[#0F172A] font-semibold text-sm
+                  overflow-hidden after:absolute after:h-1 after:w-1
+                  after:bg-[#E2E8F0] after:left-3 after:bottom-0
+                  after:translate-y-full after:rounded-full after:-z-10
+                  after:hover:scale-[300] after:hover:transition-all after:hover:duration-700
+                  after:transition-all after:duration-700
+                  transition-all duration-700
+                  hover:border-[#0F172A]
+                  flex items-center gap-2
+                ">
+                  <MessageSquare className="w-4 h-4" /> Post Topic
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Post a Discussion Topic</DialogTitle>
+                  <DialogDescription>Start a conversation with your community</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateTopic} className="space-y-4 mt-2">
+                  <div>
+                    <Label className="mb-1.5 block text-[#0F172A] font-semibold text-sm">Title *</Label>
+                    <Input value={topicData.title}
+                      onChange={e => setTopicData(p => ({ ...p, title: e.target.value }))}
+                      placeholder="What's on your mind?" required
+                      className="rounded-xl border-[#E2E8F0] focus:ring-[#7F77DD]" />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-[#0F172A] font-semibold text-sm">Category</Label>
+                    <Select value={topicData.category}
+                      onValueChange={v => setTopicData(p => ({ ...p, category: v }))}>
+                      <SelectTrigger className="rounded-xl border-[#E2E8F0]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {['general','security','maintenance','events','announcements'].map(c => (
+                          <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-[#0F172A] font-semibold text-sm">Content *</Label>
+                    <Textarea value={topicData.content}
+                      onChange={e => setTopicData(p => ({ ...p, content: e.target.value }))}
+                      placeholder="Share details…" rows={4} required
+                      className="rounded-xl border-[#E2E8F0] focus:ring-[#7F77DD]" />
+                  </div>
+                  <DialogFooter>
+                    <button type="button" onClick={() => setShowTopicModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[#64748B] font-semibold text-sm hover:bg-[#F8FAFC] transition">
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      className="relative px-4 py-2.5 z-10 rounded-xl bg-[#0F172A] text-[#FDE9AB] font-semibold text-sm
+                        overflow-hidden after:absolute after:h-1 after:w-1 after:bg-[#1E293B] after:left-3 after:bottom-0
+                        after:translate-y-full after:rounded-full after:-z-10
+                        after:hover:scale-[300] after:hover:transition-all after:hover:duration-700
+                        after:transition-all after:duration-700 transition-all duration-700">
+                      Post Topic
+                    </button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
-                  <form onSubmit={handleCreateEvent} className="space-y-4">
-                    <div>
-                      <Label>Event Title *</Label>
-                      <Input
-                        value={eventData.title}
-                        onChange={(e) => setEventData({ ...eventData, title: e.target.value })}
-                        placeholder="Community Tea Gathering"
-                        required
-                      />
+            {/* Create event */}
+            <Dialog open={showEventModal} onOpenChange={setShowEventModal}>
+              <DialogTrigger asChild>
+                <button className="
+                  relative px-4 py-2.5 z-10 rounded-xl
+                  bg-[#0F172A] text-[#FDE9AB] font-semibold text-sm
+                  overflow-hidden after:absolute after:h-1 after:w-1
+                  after:bg-[#1E293B] after:left-3 after:bottom-0
+                  after:translate-y-full after:rounded-full after:-z-10
+                  after:hover:scale-[300] after:hover:transition-all after:hover:duration-700
+                  after:transition-all after:duration-700
+                  transition-all duration-700
+                  flex items-center gap-2
+                ">
+                  <Plus className="w-4 h-4" /> Create Event
+                </button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create Community Event</DialogTitle>
+                  <DialogDescription>Schedule an event for your community</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateEvent} className="space-y-4 mt-2">
+                  {[
+                    { key: 'title',    label: 'Event Name *',  placeholder: 'Annual General Meeting', type: 'text' },
+                    { key: 'date',     label: 'Date *',         placeholder: '',                       type: 'date' },
+                    { key: 'time',     label: 'Time *',         placeholder: '',                       type: 'time' },
+                    { key: 'location', label: 'Location *',     placeholder: 'Community Hall',          type: 'text' },
+                  ].map(({ key, label, placeholder, type }) => (
+                    <div key={key}>
+                      <Label className="mb-1.5 block text-[#0F172A] font-semibold text-sm">{label}</Label>
+                      <Input type={type} value={eventData[key]}
+                        onChange={e => setEventData(p => ({ ...p, [key]: e.target.value }))}
+                        placeholder={placeholder} required
+                        className="rounded-xl border-[#E2E8F0] focus:ring-[#7F77DD]" />
                     </div>
-
-                    <div>
-                      <Label>Description</Label>
-                      <Textarea
-                        value={eventData.description}
-                        onChange={(e) => setEventData({ ...eventData, description: e.target.value })}
-                        placeholder="What's this event about?"
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Date *</Label>
-                        <Input
-                          type="date"
-                          value={eventData.date}
-                          onChange={(e) => setEventData({ ...eventData, date: e.target.value })}
-                          min={new Date().toISOString().split('T')[0]}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label>Time</Label>
-                        <Input
-                          type="time"
-                          value={eventData.time}
-                          onChange={(e) => setEventData({ ...eventData, time: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label>Location *</Label>
-                      <Input
-                        value={eventData.location}
-                        onChange={(e) => setEventData({ ...eventData, location: e.target.value })}
-                        placeholder="Grevillea Community Center"
-                        required
-                      />
-                    </div>
-
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setShowEventModal(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                        Create Event
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
+                  ))}
+                  <div>
+                    <Label className="mb-1.5 block text-[#0F172A] font-semibold text-sm">Description</Label>
+                    <Textarea value={eventData.description}
+                      onChange={e => setEventData(p => ({ ...p, description: e.target.value }))}
+                      placeholder="What's this event about?" rows={3}
+                      className="rounded-xl border-[#E2E8F0] focus:ring-[#7F77DD]" />
+                  </div>
+                  <DialogFooter>
+                    <button type="button" onClick={() => setShowEventModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[#64748B] font-semibold text-sm hover:bg-[#F8FAFC] transition">
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      className="relative px-4 py-2.5 z-10 rounded-xl bg-[#0F172A] text-[#FDE9AB] font-semibold text-sm
+                        overflow-hidden after:absolute after:h-1 after:w-1 after:bg-[#1E293B] after:left-3 after:bottom-0
+                        after:translate-y-full after:rounded-full after:-z-10
+                        after:hover:scale-[300] after:hover:transition-all after:hover:duration-700
+                        after:transition-all after:duration-700 transition-all duration-700">
+                      Create Event
+                    </button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
           {/* Street Groups */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-2 mb-2">
-                <Users className="w-5 h-5 text-gray-700" />
-                <h2 className="text-xl font-bold text-gray-900">Street Groups</h2>
-              </div>
-              <p className="text-gray-600 text-sm">Join your neighborhood micro-groups</p>
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F1F5F9] flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#7F77DD]" />
+              <h2 className="font-bold text-[#0F172A]">Street Groups</h2>
             </div>
-
-            <div className="p-6 space-y-3">
+            <div className="divide-y divide-[#F1F5F9]">
               {groups.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                  <p>No street groups yet</p>
-                </div>
-              ) : (
-                groups.slice(0, 5).map((group) => (
-                  <div
-                    key={group._id}
-                    className="flex items-center justify-between p-4 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer transition"
-                    onClick={() => router.push(`/dashboard/community/groups/${group._id}`)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                        <MapPin className="w-5 h-5 text-gray-600" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">{group.name}</p>
-                          {group.members.length > 30 && (
-                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600">{group.members.length} members</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                <div className="p-8 text-center text-[#94A3B8] text-sm">No groups yet</div>
+              ) : groups.map(g => (
+                <div key={g._id}
+                  onClick={() => navigate(`/dashboard/community/groups/${g._id}`)}
+                  className="px-6 py-4 flex items-center justify-between hover:bg-[#F8FAFC] cursor-pointer transition group">
+                  <div>
+                    <p className="font-semibold text-[#0F172A] text-sm">{g.name}</p>
+                    <p className="text-xs text-[#94A3B8] mt-0.5">{g.members?.length || 0} members</p>
                   </div>
-                ))
-              )}
-
-              {groups.length > 5 && (
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => router.push('/dashboard/community/groups')}
-                >
-                  View All Groups
-                </Button>
-              )}
+                  <ChevronRight className="w-4 h-4 text-[#94A3B8] group-hover:text-[#0F172A] transition" />
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Upcoming Events */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar className="w-5 h-5 text-gray-700" />
-                <h2 className="text-xl font-bold text-gray-900">Upcoming Events</h2>
-              </div>
-              <p className="text-gray-600 text-sm">Community gatherings and meetings</p>
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F1F5F9] flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#1D9E75]" />
+              <h2 className="font-bold text-[#0F172A]">Upcoming Events</h2>
             </div>
-
-            <div className="p-6">
+            <div className="divide-y divide-[#F1F5F9]">
               {events.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                  <p className="mb-2">No upcoming events</p>
-                  <button
-                    onClick={() => setShowEventModal(true)}
-                    className="text-green-600 hover:text-green-700 text-sm font-medium"
-                  >
-                    Create one!
-                  </button>
+                <div className="p-8 text-center text-[#94A3B8] text-sm">No upcoming events</div>
+              ) : events.slice(0, 5).map(ev => (
+                <div key={ev._id} className="px-6 py-4">
+                  <p className="font-semibold text-[#0F172A] text-sm mb-1">{ev.title}</p>
+                  <div className="flex items-center gap-3 text-xs text-[#94A3B8]">
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(ev.date)}</span>
+                    {ev.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{ev.location}</span>}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {events.map((event) => (
-                    <div
-                      key={event._id}
-                      className="p-4 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer transition"
-                      onClick={() => router.push(`/dashboard/community/events/${event._id}`)}
-                    >
-                      <h3 className="font-medium text-gray-900 mb-2">{event.title}</h3>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          <span>
-                            {new Date(event.date).toLocaleDateString('en-US', {
-                              weekday: 'long',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </span>
-                        </div>
-                        {event.time && (
-                          <div className="flex items-center gap-2">
-                            <span className="w-4" />
-                            <span>{event.time}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          <span>{event.location}</span>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <div className="flex -space-x-2">
-                          {event.attendees.slice(0, 3).map((attendee, i) => (
-                            <div
-                              key={i}
-                              className="w-6 h-6 rounded-full bg-green-600 border-2 border-white flex items-center justify-center text-white text-xs font-bold"
-                            >
-                              {attendee.user_id?.username?.charAt(0) || '?'}
-                            </div>
-                          ))}
-                        </div>
-                        <span className="text-xs text-gray-600">
-                          {event.attendees.length} attending
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+              ))}
+            </div>
+          </div>
+
+          {/* Discussions */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F1F5F9] flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-[#378ADD]" />
+              <h2 className="font-bold text-[#0F172A]">Discussions</h2>
+            </div>
+            <div className="divide-y divide-[#F1F5F9]">
+              {discussions.length === 0 ? (
+                <div className="p-8 text-center text-[#94A3B8] text-sm">No discussions yet</div>
+              ) : discussions.slice(0, 5).map(d => (
+                <div key={d._id}
+                  onClick={() => navigate(`/dashboard/community/discussions/${d._id}`)}
+                  className="px-6 py-4 hover:bg-[#F8FAFC] cursor-pointer transition group">
+                  <p className="font-semibold text-[#0F172A] text-sm mb-1 line-clamp-1">{d.title}</p>
+                  <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
+                    <span className="capitalize px-2 py-0.5 bg-[#EEEDFE] text-[#3C3489] rounded-full font-medium">
+                      {d.category}
+                    </span>
+                    <span>{d.replies?.length || 0} replies</span>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
-
-        {/* Recent Discussions */}
-        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-gray-700" />
-                <h2 className="text-xl font-bold text-gray-900">Recent Discussions</h2>
-              </div>
-              <Button onClick={() => setShowTopicModal(true)}>
-  <Plus className="w-4 h-4 mr-2" />
-  New Topic
-</Button>
-
-<Dialog open={showTopicModal} onOpenChange={setShowTopicModal}>
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>Start a Discussion</DialogTitle>
-    </DialogHeader>
-    
-    <div className="space-y-4">
-      <div>
-        <Label>Title</Label>
-        <Input
-          value={topicData.title}
-          onChange={(e) => setTopicData({...topicData, title: e.target.value})}
-          placeholder="Water supply issues on Street 5"
-        />
       </div>
-      
-      <div>
-        <Label>Category</Label>
-        <Select
-          value={topicData.category}
-          onValueChange={(value) => setTopicData({...topicData, category: value})}
-        >
-          <SelectTrigger className='w-full'>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="general">General</SelectItem>
-            <SelectItem value="security">Security</SelectItem>
-            <SelectItem value="events">Events</SelectItem>
-            <SelectItem value="improvements">Improvements</SelectItem>
-            <SelectItem value="complaints">Complaints</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div>
-        <Label>Message</Label>
-        <Textarea
-          value={topicData.content}
-          onChange={(e) => setTopicData({...topicData, content: e.target.value})}
-          placeholder="Describe the topic..."
-          rows={5}
-        />
-      </div>
-    </div>
-    
-    <DialogFooter>
-      <Button variant="outline" onClick={() => setShowTopicModal(false)}>
-        Cancel
-      </Button>
-      <Button onClick={handleCreateTopic}>
-        Create Topic
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-            </div>
-            <p className="text-gray-600 text-sm mt-1">Join the conversation with your neighbors</p>
-          </div>
-
-          <div className="space-y-3">
-  {discussions.map((discussion) => (
-    <div
-      key={discussion._id}
-      className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer"
-      onClick={() => router.push(`/dashboard/community/discussions/${discussion._id}`)}
-    >
-      <h3 className="font-bold text-gray-900">{discussion.title}</h3>
-      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{discussion.content}</p>
-      <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-        <span>By {discussion.author_id?.username}</span>
-        <span>•</span>
-        <span>{discussion.replies?.length || 0} replies</span>
-        <span>•</span>
-        <span>{discussion.views || 0} views</span>
-      </div>
-    </div>
-  ))}
-</div>
-        </div>
-      </div>
-    </div>
     </DashboardLayout>
   );
 }

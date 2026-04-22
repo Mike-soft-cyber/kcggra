@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-    baseURL: 'https://kcggra-production.up.railway.app/api',
+    baseURL: 'https://kcggra.onrender.com/api',
     headers: {
         "Content-Type": 'application/json'
     },

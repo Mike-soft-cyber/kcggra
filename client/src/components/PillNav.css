@@ -1,0 +1,187 @@
+/* ── Wrapper ── */
+.pill-nav-wrapper {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 30;
+  background: #0F172A;
+  transition: box-shadow 0.3s ease;
+}
+
+.pill-nav-gold-line {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(253,233,171,0.4), transparent);
+}
+
+.pill-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  gap: 16px;
+  min-height: 56px;
+}
+
+.pill-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pill-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Logo ── */
+.pill-logo {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(253,233,171,0.12);
+  border: 1.5px solid rgba(253,233,171,0.25);
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  text-decoration: none;
+  flex-shrink: 0; cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pill-logo:hover {
+  background: rgba(253,233,171,0.22);
+  border-color: rgba(253,233,171,0.5);
+}
+.pill-logo-text {
+  color: #FDE9AB;
+  font-weight: 900; font-size: 17px; line-height: 1;
+  display: block; transform-origin: center;
+}
+
+/* ── Pills container ── */
+.pill-nav-items {
+  display: flex; align-items: center;
+  height: 44px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 9999px;
+  border: 1px solid rgba(255,255,255,0.06);
+  /* Clip everything to the pill bar — no label leakage */
+  overflow: hidden;
+}
+
+.pill-list {
+  list-style: none;
+  display: flex; align-items: stretch;
+  gap: 3px; margin: 0; padding: 4px; height: 100%;
+}
+.pill-list > li { display: flex; height: 100%; }
+
+/* ─────────────────────────────────────────────────────────
+   PILL — overflow hidden so the bubble stays inside.
+   Labels use opacity crossfade — no vertical movement,
+   so nothing leaks above or below the pill bounds.
+───────────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  height: 100%; padding: 0 18px;
+  background: transparent; color: #94A3B8;
+  text-decoration: none; border-radius: 9999px;
+  font-weight: 600; font-size: 13px; white-space: nowrap;
+  cursor: pointer; position: relative;
+  overflow: hidden;
+  transition: color 0.25s ease;
+}
+
+/* Expanding bubble — clips inside .pill overflow:hidden */
+.pill .hover-circle {
+  position: absolute; left: 50%; bottom: 0;
+  border-radius: 50%;
+  background: rgba(253,233,171,0.18);
+  z-index: 1; pointer-events: none;
+  will-change: transform;
+  /* GSAP sets dimensions and transform:scale(0) on setup */
+}
+
+/* Label wrapper */
+.pill .label-stack {
+  position: relative;
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  z-index: 2;
+}
+
+/* Default label — visible, full opacity */
+.pill .pill-label {
+  display: block;
+  will-change: opacity;
+  /* CSS default: fully visible */
+  opacity: 1;
+}
+
+/* Hover label — sits exactly on top, hidden by default */
+.pill .pill-label-hover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center; justify-content: center;
+  color: #FDE9AB;
+  z-index: 3;
+  will-change: opacity;
+  white-space: nowrap;
+  /* CSS default: invisible — GSAP fades it in on hover */
+  opacity: 0;
+}
+
+/* Active pill */
+.pill.is-active {
+  background: #FDE9AB;
+  color: #0F172A;
+}
+.pill.is-active .pill-label { color: #0F172A; }
+/* Active pill doesn't need hover label color override */
+
+/* ── Desktop / Mobile ── */
+.desktop-only { display: flex; }
+.mobile-only  { display: none !important; }
+
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-only  { display: flex !important; }
+  .pill-nav-inner { padding: 8px 16px; }
+}
+
+/* ── Mobile hamburger ── */
+.mobile-menu-button {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 5px; cursor: pointer; padding: 0;
+}
+.hamburger-line {
+  width: 16px; height: 2px; background: #FDE9AB;
+  border-radius: 1px; transform-origin: center; display: block;
+}
+
+/* ── Mobile dropdown ── */
+.mobile-menu-popover {
+  position: absolute; top: calc(100% + 8px);
+  left: 12px; right: 12px;
+  background: #0F172A; border-radius: 20px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  z-index: 998; border: 1px solid rgba(253,233,171,0.12);
+  opacity: 0; visibility: hidden;
+}
+.mobile-menu-list {
+  list-style: none; margin: 0; padding: 6px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.mobile-menu-link {
+  display: block; padding: 12px 18px; color: #94A3B8;
+  text-decoration: none; font-size: 14px; font-weight: 600;
+  border-radius: 14px; transition: all 0.2s ease;
+}
+.mobile-menu-link:hover,
+.mobile-menu-link.is-active { background: #FDE9AB; color: #0F172A; }

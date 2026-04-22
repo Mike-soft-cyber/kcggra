@@ -3,8 +3,9 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 // Public Pages
 import Login from './pages/Login'
-import Signup from './pages/Signup'
 import PublicVisitorQR from './pages/PublicVisitorQR'
+
+import DashboardLayout from './components/DashboardLayout'
 
 // Resident Dashboard Pages
 import Dashboard from './pages/Dashboard'
@@ -43,10 +44,10 @@ export default function App() {
         {/* PUBLIC ROUTES */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
         <Route path="/visitor/:visitor_id" element={<PublicVisitorQR />} />
 
         {/* RESIDENT DASHBOARD */}
+        <Route element={<DashboardLayout />}>
         <Route path="/dashboard" element={
           <ProtectedRoute allowedRoles={['resident']}>
             <Dashboard />
@@ -121,6 +122,7 @@ export default function App() {
             <AdminProjects />
           </ProtectedRoute>
         } />
+        </Route>
 
         {/* GUARD DASHBOARD */}
         <Route path="/guard/dashboard" element={
